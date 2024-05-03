@@ -1,0 +1,10 @@
+^C:\USERS\BUBTH\DEVELOPMENT\ABCS\ABCS\BUILD\WINDOWS\X64\CMAKEFILES\3BB732B2CCF7538608D18F905E6269B2\INSTALL_FORCE.RULE
+setlocal
+cd .
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal & call :cmErrorLevel %errorlevel% & goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd

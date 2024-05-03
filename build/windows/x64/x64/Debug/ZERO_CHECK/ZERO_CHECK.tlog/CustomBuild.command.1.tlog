@@ -1,0 +1,10 @@
+^C:\USERS\BUBTH\DEVELOPMENT\ABCS\ABCS\BUILD\WINDOWS\X64\CMAKEFILES\3BB732B2CCF7538608D18F905E6269B2\GENERATE.STAMP.RULE
+setlocal
+"C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" -SC:/Users/bubth/Development/abcs/abcs/windows -BC:/Users/bubth/Development/abcs/abcs/build/windows/x64 --check-stamp-list CMakeFiles/generate.stamp.list --vs-solution-file C:/Users/bubth/Development/abcs/abcs/build/windows/x64/abcs.sln
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal & call :cmErrorLevel %errorlevel% & goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd
