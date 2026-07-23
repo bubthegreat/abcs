@@ -188,7 +188,7 @@ fun App(vm: AppViewModel, audio: AudioBox, ink: InkBox, sound: SoundBox) {
             )
             "cards" -> {
                 BackHandler { vm.closeDeck(); screen = "home" }
-                DeckScreen(vm = vm, state = state, audio = audio, onClose = { vm.closeDeck(); screen = "home" })
+                DeckScreen(vm = vm, state = state, audio = audio, sound = sound, onClose = { vm.closeDeck(); screen = "home" })
             }
             "quiz" -> {
                 BackHandler { vm.closeDeck(); screen = "home" }
@@ -359,6 +359,7 @@ private fun QuizScreen(vm: AppViewModel, state: AppState, audio: AudioBox, sound
     if (complete && !reviewMode) {
         CelebrationScreen(
             deckTitle = status!!.deck.title,
+            sound = sound,
             onKeepPracticing = { vm.keepPracticing() },
             onClose = onClose,
         )
@@ -479,6 +480,7 @@ private fun QuizScreen(vm: AppViewModel, state: AppState, audio: AudioBox, sound
                     Button(
                         onClick = {
                             if (wrongPicked != null || flashCorrect) return@Button
+                            sound.click()
                             if (isAnswer) {
                                 flashCorrect = true
                                 sound.correct()
@@ -760,7 +762,7 @@ private fun DeckTile(
 }
 
 @Composable
-private fun DeckScreen(vm: AppViewModel, state: AppState, audio: AudioBox, onClose: () -> Unit) {
+private fun DeckScreen(vm: AppViewModel, state: AppState, audio: AudioBox, sound: SoundBox, onClose: () -> Unit) {
     val card by vm.currentCard.collectAsState()
     val openDeckId by vm.openDeckId.collectAsState()
     val reviewMode by vm.reviewMode.collectAsState()
@@ -772,6 +774,7 @@ private fun DeckScreen(vm: AppViewModel, state: AppState, audio: AudioBox, onClo
     if (complete && !reviewMode) {
         CelebrationScreen(
             deckTitle = status!!.deck.title,
+            sound = sound,
             onKeepPracticing = { vm.keepPracticing() },
             onClose = onClose,
         )
@@ -875,12 +878,12 @@ private fun DeckScreen(vm: AppViewModel, state: AppState, audio: AudioBox, onClo
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Button(
-                onClick = { showBack = false; vm.markWrong() },
+                onClick = { sound.click(); showBack = false; vm.markWrong() },
                 modifier = Modifier.weight(1f).height(64.dp),
                 enabled = card != null,
             ) { Text("✗ Not yet", fontSize = 20.sp) }
             Button(
-                onClick = { showBack = false; vm.markCorrect() },
+                onClick = { sound.click(); showBack = false; vm.markCorrect() },
                 modifier = Modifier.weight(1f).height(64.dp),
                 enabled = card != null,
             ) { Text("✓ Got it", fontSize = 20.sp) }
@@ -889,7 +892,13 @@ private fun DeckScreen(vm: AppViewModel, state: AppState, audio: AudioBox, onClo
 }
 
 @Composable
-private fun CelebrationScreen(deckTitle: String, onKeepPracticing: () -> Unit, onClose: () -> Unit) {
+private fun CelebrationScreen(
+    deckTitle: String,
+    sound: SoundBox,
+    onKeepPracticing: () -> Unit,
+    onClose: () -> Unit,
+) {
+    androidx.compose.runtime.LaunchedEffect(Unit) { sound.cheer() }
     Column(
         modifier = Modifier.fillMaxSize().padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,

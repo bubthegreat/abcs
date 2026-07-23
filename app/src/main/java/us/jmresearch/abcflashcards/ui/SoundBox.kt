@@ -428,6 +428,20 @@ class SoundBox {
         track.play()
     }
 
+    /** Soft low-key tap tick for button presses. */
+    fun click() = playEffect(tone(note(15), 28, amplitude = 0.18))
+
+    /** Big ascending cheer for finishing a whole module. */
+    fun cheer() = playEffect(
+        concat(
+            listOf(
+                tone(note(3), 90), tone(note(7), 90), tone(note(10), 90),
+                tone(note(15), 90), tone(note(19), 90), tone(note(22), 110),
+                tone(note(27), 420, amplitude = 0.55),
+            ),
+        ),
+    )
+
     /** Two quick rising notes. */
     fun correct() = playEffect(concat(listOf(tone(note(3), 110), tone(note(10), 160))))
 
