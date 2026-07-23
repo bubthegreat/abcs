@@ -33,6 +33,12 @@ class UtteranceTest {
         assertEquals("7", utteranceFor(item("numbers", "num_7"), deck("numbers")))
     }
 
+    @Test fun colorsShapesAndCombosSpeakTheirNames() {
+        assertEquals("red", utteranceFor(item("colors", "color_red"), deck("colors")))
+        assertEquals("circle", utteranceFor(item("shapes", "shape_circle"), deck("shapes")))
+        assertEquals("red square", utteranceFor(item("colors_shapes", "combo_red_square"), deck("colors_shapes")))
+    }
+
     @Test fun reviewLettersShareMainLetterRecording() {
         assertEquals("letter_s", recordingKeyFor("letterreview_s"))
         assertEquals("letter_s", recordingKeyFor("letter_s"))

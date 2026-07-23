@@ -41,6 +41,7 @@ val letterRecordingPrompts: Map<Char, String> = mapOf(
 
 /** What TTS should say for a card, when no parent recording exists. */
 fun utteranceFor(item: CardItem, deck: Deck): String = when (deck.subject) {
+    Subject.COLORS -> item.id.substringAfter("_").replace("_", " ")
     Subject.LETTERS -> item.id.substringAfterLast("_").uppercase()
     Subject.WORDS, Subject.PHRASES -> item.front
     Subject.MATH -> when (deck.id) {

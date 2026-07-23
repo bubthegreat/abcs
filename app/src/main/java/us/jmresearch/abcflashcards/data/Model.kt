@@ -2,7 +2,7 @@ package us.jmresearch.abcflashcards.data
 
 data class CardItem(val id: String, val front: String, val back: String? = null)
 
-enum class Subject { LETTERS, WORDS, PHRASES, MATH }
+enum class Subject { COLORS, LETTERS, WORDS, PHRASES, MATH }
 
 sealed interface UnlockRule {
     data object None : UnlockRule

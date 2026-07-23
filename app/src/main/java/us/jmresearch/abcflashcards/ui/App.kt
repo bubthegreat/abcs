@@ -53,6 +53,7 @@ import kotlinx.coroutines.launch
 import us.jmresearch.abcflashcards.data.Subject
 
 private val subjectColors = mapOf(
+    Subject.COLORS to Color(0xFFEC407A),
     Subject.LETTERS to Color(0xFF7E57C2),
     Subject.WORDS to Color(0xFF26A69A),
     Subject.PHRASES to Color(0xFFEF6C00),
@@ -62,6 +63,7 @@ private val subjectColors = mapOf(
 private data class TabSpec(val subject: Subject?, val title: String, val emoji: String)
 
 private val tabs = listOf(
+    TabSpec(Subject.COLORS, "Colors", "🎨"),
     TabSpec(Subject.LETTERS, "Letters", "🔤"),
     TabSpec(Subject.WORDS, "Words", "📖"),
     TabSpec(Subject.PHRASES, "Phrases", "💬"),

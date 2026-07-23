@@ -30,7 +30,44 @@ object Curriculum {
         }
     }
 
+    private val colorEmojis = listOf(
+        "red" to "🔴", "blue" to "🔵", "green" to "🟢", "yellow" to "🟡",
+        "orange" to "🟠", "purple" to "🟣", "brown" to "🟤", "black" to "⚫", "white" to "⚪",
+    )
+
+    private val shapeEmojis = listOf(
+        "circle" to "⭕", "square" to "⬛", "triangle" to "🔺", "star" to "⭐",
+        "heart" to "❤️", "diamond" to "🔷", "moon" to "🌙", "egg" to "🥚",
+    )
+
+    // Only color+shape pairs that have a real emoji.
+    private val comboEmojis = listOf(
+        Triple("red", "circle", "🔴"), Triple("blue", "circle", "🔵"), Triple("green", "circle", "🟢"),
+        Triple("yellow", "circle", "🟡"), Triple("orange", "circle", "🟠"), Triple("purple", "circle", "🟣"),
+        Triple("red", "square", "🟥"), Triple("blue", "square", "🟦"), Triple("green", "square", "🟩"),
+        Triple("yellow", "square", "🟨"), Triple("orange", "square", "🟧"), Triple("purple", "square", "🟪"),
+        Triple("red", "heart", "❤️"), Triple("blue", "heart", "💙"), Triple("green", "heart", "💚"),
+        Triple("yellow", "heart", "💛"), Triple("orange", "heart", "🧡"), Triple("purple", "heart", "💜"),
+    )
+
     val decks: List<Deck> = buildList {
+        // Colors & shapes — for the youngest learners; no reading required
+        add(Deck(
+            id = "colors", title = "Colors", subject = Subject.COLORS,
+            items = colorEmojis.map { (name, emoji) -> CardItem("color_$name", emoji) },
+            unlockRule = UnlockRule.None,
+        ))
+        add(Deck(
+            id = "shapes", title = "Shapes", subject = Subject.COLORS,
+            items = shapeEmojis.map { (name, emoji) -> CardItem("shape_$name", emoji) },
+            unlockRule = UnlockRule.None,
+        ))
+        add(Deck(
+            id = "colors_shapes", title = "Colors + Shapes", subject = Subject.COLORS,
+            items = comboEmojis.map { (color, shape, emoji) -> CardItem("combo_${color}_$shape", emoji) },
+            unlockRule = UnlockRule.DecksMastered(listOf("colors", "shapes")),
+        ))
+
         // Letters — Jolly Phonics groups
         add(letterDeck("letters_1", "Letters 1", "satpin", UnlockRule.None))
         add(letterDeck("letters_2", "Letters 2", "ckehrmd", UnlockRule.DecksMastered(listOf("letters_1"))))

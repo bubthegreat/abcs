@@ -25,6 +25,7 @@ class CurriculumTest {
             "letters_1", "letters_2", "letters_3", "letters_4", "letters_5", "letters_review",
             "cvc_1", "cvc_2", "cvc_3", "sight_1", "phrases_1", "phrases_2",
             "numbers", "counting", "addition", "subtraction", "multiplication", "division",
+            "colors", "shapes", "colors_shapes",
         )
         expected.forEach { id -> assertTrue("missing deck $id", decks.any { it.id == id }) }
     }
@@ -97,5 +98,22 @@ class CurriculumTest {
         assertEquals(UnlockRule.DecksMastered(listOf("numbers")), rule("counting"))
         assertEquals(UnlockRule.DecksMastered(listOf("addition", "subtraction")), rule("multiplication"))
         assertEquals(UnlockRule.DecksMastered(listOf("multiplication")), rule("division"))
+        assertEquals(UnlockRule.None, rule("colors"))
+        assertEquals(UnlockRule.None, rule("shapes"))
+        assertEquals(UnlockRule.DecksMastered(listOf("colors", "shapes")), rule("colors_shapes"))
+    }
+
+    @Test fun colorAndShapeCardsAreEmojiWithSpokenNames() {
+        deck("colors").items.forEach { item ->
+            assertTrue("color ids look like color_<name>", item.id.startsWith("color_"))
+            assertTrue("front should be emoji, not text: ${item.front}", item.front.length <= 3)
+        }
+        deck("shapes").items.forEach { item ->
+            assertTrue(item.id.startsWith("shape_"))
+        }
+        deck("colors_shapes").items.forEach { item ->
+            assertTrue(item.id.startsWith("combo_"))
+            assertEquals(2, item.id.removePrefix("combo_").split("_").size) // color_shape
+        }
     }
 }
