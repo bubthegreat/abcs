@@ -23,7 +23,17 @@ make release-apk  # unsigned release APK
 make clean
 ```
 
-## Install onto a tablet (USB, default)
+## Quickest install: latest release, no build
+
+With the tablet on USB (debugging enabled):
+
+```sh
+make install-latest
+```
+
+Downloads the newest CI-built APK from GitHub Releases and installs it.
+
+## Install onto a tablet (USB, local build)
 
 1. On the tablet: Settings → About → tap **Build number** 7 times, then
    Developer options → enable **USB debugging**.

@@ -12,13 +12,16 @@ DOCKER_RUN := MSYS_NO_PATHCONV=1 docker run --rm \
 	-e GRADLE_USER_HOME=/work/.gradle-docker \
 	$(ANDROID_IMAGE)
 
-.PHONY: apk release-apk test clean install help
+REPO := bubthegreat/abcs
+
+.PHONY: apk release-apk test clean install install-latest help
 
 help:
 	@echo "make apk          - build debug APK via Docker (app/build/outputs/apk/debug/)"
 	@echo "make release-apk  - build unsigned release APK via Docker"
 	@echo "make test         - run unit tests via Docker"
 	@echo "make install                        - build in Docker, install via host adb over USB"
+	@echo "make install-latest                 - download newest GitHub release APK, install via USB (no build)"
 	@echo "make pair DEVICE=ip:port CODE=nnnnnn - one-time wireless adb pairing (in Docker)"
 	@echo "make install-wifi DEVICE=ip:port    - build + install over wireless adb (in Docker)"
 	@echo "make clean        - gradle clean via Docker"
@@ -52,6 +55,16 @@ pair:
 install: apk
 	adb install -r app/build/outputs/apk/debug/app-debug.apk
 	@echo "Installed. Find 'Let's Learn' in the app drawer."
+
+# Skip building entirely: grab the newest CI release APK and install it.
+install-latest:
+	curl -s https://api.github.com/repos/$(REPO)/releases/latest \
+		| grep -o '"browser_download_url": *"[^"]*\.apk"' \
+		| grep -o 'https[^"]*' \
+		| head -1 \
+		| xargs curl -L -o .latest.apk
+	adb install -r .latest.apk
+	@echo "Installed latest release. Find 'Let's Learn' in the app drawer."
 
 # Fully containerized alternative over Wireless debugging.
 install-wifi: apk
