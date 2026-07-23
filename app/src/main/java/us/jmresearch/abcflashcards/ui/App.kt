@@ -248,7 +248,8 @@ private fun QuizScreen(vm: AppViewModel, state: AppState, audio: AudioBox, onClo
     }
 
     val q = quiz
-    androidx.compose.runtime.LaunchedEffect(q?.item?.id) {
+    val quizNonce by vm.quizNonce.collectAsState()
+    androidx.compose.runtime.LaunchedEffect(quizNonce) {
         wrongChoices = emptySet()
         flashCorrect = false
         q?.let {

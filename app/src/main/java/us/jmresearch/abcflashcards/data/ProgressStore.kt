@@ -131,6 +131,14 @@ class ProgressStore(private val context: Context) {
         }
     }
 
+    suspend fun addStars(count: Int) {
+        context.dataStore.edit { prefs ->
+            val pid = activePid(prefs)
+            val bank = prefs[starBankKey(pid)]?.toIntOrNull() ?: 0
+            prefs[starBankKey(pid)] = (bank + count).toString()
+        }
+    }
+
     suspend fun redeemStars(count: Int) {
         context.dataStore.edit { prefs ->
             val pid = activePid(prefs)

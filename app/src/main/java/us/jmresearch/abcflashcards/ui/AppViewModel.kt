@@ -103,6 +103,10 @@ class AppViewModel(private val store: ProgressStore) : ViewModel() {
     private val _currentQuiz = MutableStateFlow<Quiz?>(null)
     val currentQuiz: StateFlow<Quiz?> = _currentQuiz
 
+    /** Bumps on every advance so the quiz UI resets even when the same card repeats. */
+    private val _quizNonce = MutableStateFlow(0)
+    val quizNonce: StateFlow<Int> = _quizNonce
+
     /** True once the parent tapped "Keep practicing" on a fully mastered deck. */
     private val _reviewMode = MutableStateFlow(false)
     val reviewMode: StateFlow<Boolean> = _reviewMode
@@ -142,6 +146,7 @@ class AppViewModel(private val store: ProgressStore) : ViewModel() {
         }
         _currentCard.value = next
         _currentQuiz.value = next?.let { buildQuiz(it, deck, random) }
+        _quizNonce.value++
     }
 
     fun markCorrect() = mark(::applyCorrect)
@@ -156,13 +161,20 @@ class AppViewModel(private val store: ProgressStore) : ViewModel() {
         }
     }
 
-    /** Kid mode: correct tap. Advances and feeds the star bank. */
+    /** Kid mode: correct tap. Advances, feeds the star bank, bonus star on deck completion. */
     fun quizCorrect() {
         val card = _currentCard.value ?: return
+        val deck = deckById(_openDeckId.value)
         val today = LocalDate.now().toEpochDay()
+        val s = state.value
+        // Does this correct answer push the whole deck over the line?
+        val completesDeck = deck != null && !_reviewMode.value &&
+            (s.progress[card.id]?.correctCount ?: 0) + 1 >= s.threshold &&
+            deck.items.all { it.id == card.id || isMastered(s.progress[it.id], s.threshold) }
         viewModelScope.launch {
             store.updateItem(card.id) { applyCorrect(it, today) }
             store.recordKidCorrect(CORRECTS_PER_STAR)
+            if (completesDeck) store.addStars(1)
             advance(lastShownId = card.id)
         }
     }
