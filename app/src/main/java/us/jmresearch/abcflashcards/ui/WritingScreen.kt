@@ -57,6 +57,17 @@ private class DrawnStroke {
     val times = mutableListOf<Long>()
 }
 
+private const val PAPER_ROWS = 3
+private const val ROW_GAP = 28f
+
+/** Which ruled row a stroke belongs to, from its average y. */
+private fun rowIndexOf(stroke: DrawnStroke, canvasHeight: Float): Int {
+    if (stroke.points.isEmpty()) return 0
+    val rowHeight = (canvasHeight - ROW_GAP * (PAPER_ROWS + 1)) / PAPER_ROWS
+    val avgY = stroke.points.sumOf { it.y.toDouble() }.toFloat() / stroke.points.size
+    return (((avgY - ROW_GAP) / (rowHeight + ROW_GAP)).toInt()).coerceIn(0, PAPER_ROWS - 1)
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun WritingScreen(audio: AudioBox, ink: InkBox, onStoryFinished: () -> Unit) {
@@ -81,15 +92,29 @@ fun WritingScreen(audio: AudioBox, ink: InkBox, onStoryFinished: () -> Unit) {
     }
 
     suspend fun recognizeCanvas(): String? {
-        val builder = Ink.builder()
-        strokes.forEach { s ->
-            val sb = Ink.Stroke.builder()
-            s.points.forEachIndexed { i, p ->
-                sb.addPoint(Ink.Point.create(p.x, p.y, s.times.getOrElse(i) { 0L }))
+        // Recognize each ruled row separately — one long multi-row blob confuses
+        // the recognizer and drops words; rows are known geometry, so split there.
+        val rowHeight = (canvasSize.y - ROW_GAP * (PAPER_ROWS + 1)) / PAPER_ROWS
+        val byRow = strokes.groupBy { rowIndexOf(it, canvasSize.y) }.toSortedMap()
+        val parts = mutableListOf<String>()
+        for ((_, rowStrokes) in byRow) {
+            val builder = Ink.builder()
+            rowStrokes.forEach { s ->
+                val sb = Ink.Stroke.builder()
+                s.points.forEachIndexed { i, p ->
+                    sb.addPoint(Ink.Point.create(p.x, p.y, s.times.getOrElse(i) { 0L }))
+                }
+                builder.addStroke(sb.build())
             }
-            builder.addStroke(sb.build())
+            val text = ink.recognize(
+                builder.build(),
+                areaWidth = canvasSize.x,
+                areaHeight = rowHeight + ROW_GAP,
+                preContext = parts.joinToString(" "),
+            )
+            if (text != null) parts.add(text)
         }
-        return ink.recognize(builder.build(), canvasSize.x, canvasSize.y)
+        return parts.joinToString(" ").trim().takeIf { it.isNotBlank() }
     }
 
     fun hearIt() {
@@ -297,8 +322,8 @@ fun WritingScreen(audio: AudioBox, ink: InkBox, onStoryFinished: () -> Unit) {
                 canvasSize = Offset(size.width, size.height)
                 // Kid handwriting-guide paper: ruled rows with solid blue top/base
                 // lines and a dashed pink midline.
-                val rows = 3
-                val rowGap = 28f
+                val rows = PAPER_ROWS
+                val rowGap = ROW_GAP
                 val rowHeight = (size.height - rowGap * (rows + 1)) / rows
                 val blue = Color(0xFF90CAF9)
                 val pink = Color(0xFFF48FB1)
@@ -318,6 +343,9 @@ fun WritingScreen(audio: AudioBox, ink: InkBox, onStoryFinished: () -> Unit) {
                             s.points.drop(1).forEach { lineTo(it.x, it.y) }
                         }
                         drawPath(path, Color(0xFF37474F), style = Stroke(width = 6f))
+                    } else if (s.points.size == 1) {
+                        // Single tap = a dot (period, i-dot) — make it visible.
+                        drawCircle(Color(0xFF37474F), radius = 5f, center = s.points[0])
                     }
                 }
             }
