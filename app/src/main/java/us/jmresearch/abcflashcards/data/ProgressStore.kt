@@ -28,6 +28,7 @@ class ProgressStore(private val context: Context) {
     private fun thresholdKey(pid: String) = stringPreferencesKey("threshold_v1_$pid")
     private fun forceUnlockedKey(pid: String) = stringPreferencesKey("force_unlocked_v1_$pid")
     private fun starBankKey(pid: String) = stringPreferencesKey("star_bank_v1_$pid")
+    private fun homeworkKey(pid: String) = stringPreferencesKey("homework_v1_$pid")
     private fun starProgressKey(pid: String) = stringPreferencesKey("star_progress_v1_$pid")
     private val pinKey = stringPreferencesKey("parent_pin_v1")
     private val kidModeKey = stringPreferencesKey("kid_mode_v1")
@@ -100,6 +101,22 @@ class ProgressStore(private val context: Context) {
             val key = forceUnlockedKey(pid)
             val current = (prefs[key] ?: "").split(";").filter { it.isNotBlank() }.toMutableSet()
             if (unlocked) current.add(deckId) else current.remove(deckId)
+            prefs[key] = current.joinToString(";")
+        }
+    }
+
+    /** Deck ids (plus the special "writing" id) mom assigned as homework. Empty = everything earns stars. */
+    val homework: Flow<Set<String>> = safeData.map { prefs ->
+        (prefs[homeworkKey(activePid(prefs))] ?: "")
+            .split(";").filter { it.isNotBlank() }.toSet()
+    }
+
+    suspend fun setHomework(deckId: String, assigned: Boolean) {
+        context.dataStore.edit { prefs ->
+            val pid = activePid(prefs)
+            val key = homeworkKey(pid)
+            val current = (prefs[key] ?: "").split(";").filter { it.isNotBlank() }.toMutableSet()
+            if (assigned) current.add(deckId) else current.remove(deckId)
             prefs[key] = current.joinToString(";")
         }
     }

@@ -15,8 +15,13 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -52,6 +57,7 @@ private class DrawnStroke {
     val times = mutableListOf<Long>()
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun WritingScreen(audio: AudioBox, ink: InkBox, onStoryFinished: () -> Unit) {
     val modelReady by ink.modelReady.collectAsState()
@@ -173,11 +179,26 @@ fun WritingScreen(audio: AudioBox, ink: InkBox, onStoryFinished: () -> Unit) {
             return@Column
         }
 
+        var showClearConfirm by remember { mutableStateOf(false) }
+        if (showClearConfirm) {
+            AlertDialog(
+                onDismissRequest = { showClearConfirm = false },
+                title = { Text("Erase the whole page?") },
+                text = { Text("All your writing on the page will be gone!") },
+                confirmButton = {
+                    TextButton(onClick = { clearCanvas(); showClearConfirm = false }) { Text("🗑 Erase it all") }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showClearConfirm = false }) { Text("Keep writing") }
+                },
+            )
+        }
+
         // Controls ABOVE the paper so a resting palm can't hit them.
         Row(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+            modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
         ) {
             Button(
                 onClick = { hearIt() },
@@ -189,12 +210,39 @@ fun WritingScreen(audio: AudioBox, ink: InkBox, onStoryFinished: () -> Unit) {
                 enabled = strokes.isNotEmpty() && !recognizing,
                 modifier = Modifier.weight(1f).height(52.dp),
             ) { Text("✅ Sentence done", fontSize = 16.sp) }
-            TextButton(onClick = { eraserMode = !eraserMode }) {
-                Text(if (eraserMode) "🧹 Erasing" else "🧹", fontSize = 14.sp)
+            TextButton(
+                onClick = { showClearConfirm = true },
+                enabled = strokes.isNotEmpty(),
+            ) { Text("🗑 Clear page") }
+        }
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+        ) {
+            SingleChoiceSegmentedButtonRow(modifier = Modifier.weight(1f)) {
+                SegmentedButton(
+                    selected = !eraserMode,
+                    onClick = { eraserMode = false },
+                    shape = SegmentedButtonDefaults.itemShape(0, 2),
+                ) { Text("✏️ Write") }
+                SegmentedButton(
+                    selected = eraserMode,
+                    onClick = { eraserMode = true },
+                    shape = SegmentedButtonDefaults.itemShape(1, 2),
+                ) { Text("🧹 Erase") }
             }
-            TextButton(onClick = { clearCanvas() }) { Text("Clear") }
-            TextButton(onClick = { stylusOnly = !stylusOnly }) {
-                Text(if (stylusOnly) "🖊️ Pen" else "👆 Finger", fontSize = 14.sp)
+            SingleChoiceSegmentedButtonRow(modifier = Modifier.weight(1f)) {
+                SegmentedButton(
+                    selected = stylusOnly,
+                    onClick = { stylusOnly = true },
+                    shape = SegmentedButtonDefaults.itemShape(0, 2),
+                ) { Text("🖊️ Pen") }
+                SegmentedButton(
+                    selected = !stylusOnly,
+                    onClick = { stylusOnly = false },
+                    shape = SegmentedButtonDefaults.itemShape(1, 2),
+                ) { Text("👆 Finger") }
             }
         }
 

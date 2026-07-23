@@ -41,12 +41,17 @@ data class AppState(
     val starProgress: Int = 0,
     val kidMode: Boolean = false,
     val parentPin: String? = null,
+    val homework: Set<String> = emptySet(),
 )
+
+/** Special homework id for the writing/story activity (not a deck). */
+const val WRITING_HOMEWORK_ID = "writing"
 
 private data class Core(
     val progress: Map<String, ItemProgress>,
     val threshold: Int,
     val force: Set<String>,
+    val homework: Set<String>,
 )
 
 private data class Profs(val profiles: List<Profile>, val activeId: String)
@@ -66,7 +71,7 @@ class AppViewModel(private val store: ProgressStore) : ViewModel() {
 
     val state: StateFlow<AppState> =
         combine(
-            combine(store.progress, store.threshold, store.forceUnlocked) { p, t, f -> Core(p, t, f) },
+            combine(store.progress, store.threshold, store.forceUnlocked, store.homework) { p, t, f, h -> Core(p, t, f, h) },
             combine(store.profiles, store.activeProfileId) { pr, id -> Profs(pr, id) },
             combine(store.starBank, store.starProgress, store.kidMode, store.parentPin) { b, s, k, pin ->
                 KidBits(b, s, k, pin)
@@ -91,6 +96,7 @@ class AppViewModel(private val store: ProgressStore) : ViewModel() {
                 starProgress = kid.starProgress,
                 kidMode = kid.kidMode,
                 parentPin = kid.pin,
+                homework = core.homework,
             )
         }.stateIn(viewModelScope, SharingStarted.Eagerly, AppState())
 
@@ -161,20 +167,30 @@ class AppViewModel(private val store: ProgressStore) : ViewModel() {
         }
     }
 
-    /** Kid mode: correct tap. Advances, feeds the star bank, bonus star on deck completion. */
+    /** True when this activity counts toward stars: no homework set, or it's assigned. */
+    private fun earnsStars(activityId: String?): Boolean {
+        val hw = state.value.homework
+        return hw.isEmpty() || activityId in hw
+    }
+
+    /** Kid mode: correct tap. Advances; feeds the star bank when the deck is homework. */
     fun quizCorrect() {
         val card = _currentCard.value ?: return
-        val deck = deckById(_openDeckId.value)
+        val deckId = _openDeckId.value
+        val deck = deckById(deckId)
         val today = LocalDate.now().toEpochDay()
         val s = state.value
+        val earns = earnsStars(deckId)
         // Does this correct answer push the whole deck over the line?
         val completesDeck = deck != null && !_reviewMode.value &&
             (s.progress[card.id]?.correctCount ?: 0) + 1 >= s.threshold &&
             deck.items.all { it.id == card.id || isMastered(s.progress[it.id], s.threshold) }
         viewModelScope.launch {
             store.updateItem(card.id) { applyCorrect(it, today) }
-            store.recordKidCorrect(CORRECTS_PER_STAR)
-            if (completesDeck) store.addStars(1)
+            if (earns) {
+                store.recordKidCorrect(CORRECTS_PER_STAR)
+                if (completesDeck) store.addStars(1)
+            }
             advance(lastShownId = card.id)
         }
     }
@@ -247,9 +263,16 @@ class AppViewModel(private val store: ProgressStore) : ViewModel() {
         viewModelScope.launch { store.redeemStars(count) }
     }
 
-    /** Finishing a 5-sentence story in kid mode earns a star. */
+    /** Finishing a 5-sentence story in kid mode earns a star (when writing is homework or nothing is assigned). */
     fun awardStoryStar() {
+        if (!earnsStars(WRITING_HOMEWORK_ID)) return
         viewModelScope.launch { store.addStars(1) }
+    }
+
+    fun toggleHomework(activityId: String) {
+        viewModelScope.launch {
+            store.setHomework(activityId, activityId !in state.value.homework)
+        }
     }
 
     companion object {

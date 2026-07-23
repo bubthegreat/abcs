@@ -236,7 +236,12 @@ private fun KidHome(
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
                     items(decks, key = { it.deck.id }) { status ->
-                        DeckTile(status, subjectColors.getValue(subject), onDeckTap)
+                        DeckTile(
+                            status,
+                            subjectColors.getValue(subject),
+                            onDeckTap,
+                            isHomework = status.deck.id in state.homework,
+                        )
                     }
                 }
             }
@@ -439,7 +444,12 @@ private fun HomeScreen(
 }
 
 @Composable
-private fun DeckTile(status: DeckStatus, color: Color, onDeckTap: (String) -> Unit) {
+private fun DeckTile(
+    status: DeckStatus,
+    color: Color,
+    onDeckTap: (String) -> Unit,
+    isHomework: Boolean = false,
+) {
     val enabled = status.unlocked
     val complete = status.masteredCount == status.total
     Card(
@@ -456,7 +466,7 @@ private fun DeckTile(status: DeckStatus, color: Color, onDeckTap: (String) -> Un
         ) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(
-                    text = when {
+                    text = (if (isHomework) "📌 " else "") + when {
                         !enabled -> "🔒 ${status.deck.title}"
                         complete -> "⭐ ${status.deck.title}"
                         else -> status.deck.title
@@ -871,6 +881,13 @@ private fun ParentScreen(vm: AppViewModel, state: AppState, audio: AudioBox, onC
                             color = Color.Gray,
                         )
                     }
+                    val assigned = status.deck.id in state.homework
+                    TextButton(onClick = { vm.toggleHomework(status.deck.id) }) {
+                        Text(
+                            if (assigned) "📌 HW" else "📌",
+                            color = if (assigned) MaterialTheme.colorScheme.primary else Color.LightGray,
+                        )
+                    }
                     TextButton(onClick = { resetTarget = status }) { Text("Reset") }
                     when {
                         status.deck.id in state.forceUnlocked ->
@@ -879,6 +896,29 @@ private fun ParentScreen(vm: AppViewModel, state: AppState, audio: AudioBox, onC
                             TextButton(onClick = { vm.toggleForceUnlock(status.deck.id) }) { Text("Unlock") }
                     }
                 }
+            }
+            item {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text("✍️ Writing stories", fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                        Text("5-sentence story = 1 star", fontSize = 13.sp, color = Color.Gray)
+                    }
+                    val assigned = WRITING_HOMEWORK_ID in state.homework
+                    TextButton(onClick = { vm.toggleHomework(WRITING_HOMEWORK_ID) }) {
+                        Text(
+                            if (assigned) "📌 HW" else "📌",
+                            color = if (assigned) MaterialTheme.colorScheme.primary else Color.LightGray,
+                        )
+                    }
+                }
+                Text(
+                    "📌 = homework. When any 📌 is set, stars only come from pinned activities.",
+                    fontSize = 13.sp,
+                    color = Color.Gray,
+                )
             }
             item {
                 LetterRecordings(audio)
