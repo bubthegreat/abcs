@@ -6,6 +6,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -478,7 +479,7 @@ private fun HomeScreen(
                                     .then(
                                         if (hasHomework) {
                                             Modifier.drawBehind {
-                                                androidx.compose.ui.graphics.drawscope.rotate(ringAngle) {
+                                                rotate(ringAngle) {
                                                     drawCircle(
                                                         brush = androidx.compose.ui.graphics.Brush.sweepGradient(rainbow),
                                                         radius = size.minDimension / 2 - 3.dp.toPx(),
