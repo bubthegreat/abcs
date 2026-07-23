@@ -15,10 +15,21 @@ fun startsWithCapital(s: String): Boolean = s.trim().firstOrNull()?.isUpperCase(
 
 fun endsWithPunctuation(s: String): Boolean = s.trim().lastOrNull() in setOf('.', '!', '?')
 
-/** First problem with the sentence, or null when it's good. Order: length, capital, period. */
-fun sentenceProblem(s: String): String? = when {
+private fun normalized(s: String): String =
+    s.lowercase().replace(Regex("[^a-z0-9 ]"), "").replace(Regex("\\s+"), " ").trim()
+
+fun distinctWordCount(s: String): Int =
+    normalized(s).split(" ").filter { it.isNotBlank() }.toSet().size
+
+/**
+ * First problem with the sentence, or null when it's good.
+ * Order: length, repeated words, capital, period, duplicate of an earlier sentence.
+ */
+fun sentenceProblem(s: String, existing: List<String> = emptyList()): String? = when {
     !isValidSentence(s) -> "A sentence needs at least $WORDS_PER_SENTENCE words! (I read ${wordCount(s)})"
+    distinctWordCount(s) < WORDS_PER_SENTENCE -> "Use $WORDS_PER_SENTENCE DIFFERENT words — no repeating the same word!"
     !startsWithCapital(s) -> "Start your sentence with a CAPITAL letter!"
     !endsWithPunctuation(s) -> "Don't forget the period at the end!"
+    existing.any { normalized(it) == normalized(s) } -> "You already wrote that sentence! Try a new one."
     else -> null
 }

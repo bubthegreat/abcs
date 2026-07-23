@@ -135,6 +135,26 @@ class AppViewModel(private val store: ProgressStore) : ViewModel() {
     private val _quizNonce = MutableStateFlow(0)
     val quizNonce: StateFlow<Int> = _quizNonce
 
+    /** Story-in-progress lives here so tab switches and recompositions can't eat it. */
+    private val _storySentences = MutableStateFlow<List<String>>(emptyList())
+    val storySentences: StateFlow<List<String>> = _storySentences
+
+    private val _storyTold = MutableStateFlow(false)
+    val storyTold: StateFlow<Boolean> = _storyTold
+
+    fun addStorySentence(sentence: String) {
+        _storySentences.value = _storySentences.value + sentence
+    }
+
+    fun markStoryTold() {
+        _storyTold.value = true
+    }
+
+    fun clearStory() {
+        _storySentences.value = emptyList()
+        _storyTold.value = false
+    }
+
     /** True once the parent tapped "Keep practicing" on a fully mastered deck. */
     private val _reviewMode = MutableStateFlow(false)
     val reviewMode: StateFlow<Boolean> = _reviewMode

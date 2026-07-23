@@ -38,4 +38,18 @@ class WritingTest {
         assertEquals(null, sentenceProblem("Do dogs eat socks?"))
         assertEquals(null, sentenceProblem("I like loud trucks!"))
     }
+
+    @Test fun repeatedWordsDoNotCount() {
+        assertTrue(sentenceProblem("Poo poo poo.")!!.contains("DIFFERENT"))
+        assertTrue(sentenceProblem("Poo poo poo poo poo.")!!.contains("DIFFERENT"))
+        assertEquals(null, sentenceProblem("Poo is stinky.")) // 3 distinct words is fine
+    }
+
+    @Test fun duplicateSentencesAreRejected() {
+        val existing = listOf("The cat sat.")
+        assertTrue(sentenceProblem("The cat sat.", existing)!!.contains("already"))
+        assertTrue(sentenceProblem("the CAT sat", existing)!!.contains("CAPITAL")) // capital checked before dup
+        assertTrue(sentenceProblem("The cat sat!", existing)!!.contains("already")) // punctuation ignored in compare
+        assertEquals(null, sentenceProblem("The dog sat.", existing))
+    }
 }

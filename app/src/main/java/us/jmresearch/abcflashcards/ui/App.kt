@@ -552,7 +552,7 @@ private fun HomeScreen(
                         modifier = Modifier.padding(horizontal = 12.dp),
                     )
                 }
-                WritingScreen(audio = audio, ink = ink, onStoryFinished = { vm.awardStoryStar() })
+                WritingScreen(vm = vm, audio = audio, ink = ink, onStoryFinished = { vm.awardStoryStar() })
             } else {
                 val decks = state.deckStatuses.filter { it.deck.subject == subject }
                 LazyVerticalGrid(
