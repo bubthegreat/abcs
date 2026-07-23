@@ -25,7 +25,7 @@ class CurriculumTest {
             "letters_1", "letters_2", "letters_3", "letters_4", "letters_5", "letters_review",
             "cvc_1", "cvc_2", "cvc_3", "sight_1", "phrases_1", "phrases_2",
             "numbers", "counting", "addition", "subtraction", "multiplication", "division",
-            "colors", "shapes", "colors_shapes",
+            "colors", "shapes", "shapes_2", "colors_shapes",
         )
         expected.forEach { id -> assertTrue("missing deck $id", decks.any { it.id == id }) }
     }
@@ -100,6 +100,7 @@ class CurriculumTest {
         assertEquals(UnlockRule.DecksMastered(listOf("multiplication")), rule("division"))
         assertEquals(UnlockRule.None, rule("colors"))
         assertEquals(UnlockRule.None, rule("shapes"))
+        assertEquals(UnlockRule.DecksMastered(listOf("shapes")), rule("shapes_2"))
         assertEquals(UnlockRule.DecksMastered(listOf("colors", "shapes")), rule("colors_shapes"))
     }
 

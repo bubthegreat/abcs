@@ -32,12 +32,18 @@ object Curriculum {
 
     private val colorEmojis = listOf(
         "red" to "🔴", "blue" to "🔵", "green" to "🟢", "yellow" to "🟡",
-        "orange" to "🟠", "purple" to "🟣", "brown" to "🟤", "black" to "⚫", "white" to "⚪",
+        "orange" to "🟠", "purple" to "🟣", "pink" to "🌸", "brown" to "🟤",
+        "black" to "⚫", "white" to "⚪",
     )
 
     private val shapeEmojis = listOf(
-        "circle" to "⭕", "square" to "⬛", "triangle" to "🔺", "star" to "⭐",
-        "heart" to "❤️", "diamond" to "🔷", "moon" to "🌙", "egg" to "🥚",
+        "circle" to "⭕", "square" to "⬛", "rectangle" to "▬", "triangle" to "🔺",
+        "star" to "⭐", "heart" to "❤️", "diamond" to "🔷",
+    )
+
+    private val advancedShapeEmojis = listOf(
+        "pentagon" to "⬟", "hexagon" to "⬢", "octagon" to "🛑",
+        "oval" to "⬭", "cross" to "➕",
     )
 
     // Only color+shape pairs that have a real emoji.
@@ -61,6 +67,11 @@ object Curriculum {
             id = "shapes", title = "Shapes", subject = Subject.COLORS,
             items = shapeEmojis.map { (name, emoji) -> CardItem("shape_$name", emoji) },
             unlockRule = UnlockRule.None,
+        ))
+        add(Deck(
+            id = "shapes_2", title = "More Shapes", subject = Subject.COLORS,
+            items = advancedShapeEmojis.map { (name, emoji) -> CardItem("shape_$name", emoji) },
+            unlockRule = UnlockRule.DecksMastered(listOf("shapes")),
         ))
         add(Deck(
             id = "colors_shapes", title = "Colors + Shapes", subject = Subject.COLORS,
