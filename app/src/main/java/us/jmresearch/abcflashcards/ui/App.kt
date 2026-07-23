@@ -1,9 +1,11 @@
 package us.jmresearch.abcflashcards.ui
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -441,6 +443,21 @@ private fun HomeScreen(
         )
     }
 
+    // One shared spin for all homework rings.
+    val ringTransition = androidx.compose.animation.core.rememberInfiniteTransition(label = "hwRing")
+    val ringAngle by ringTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 360f,
+        animationSpec = androidx.compose.animation.core.infiniteRepeatable(
+            animation = androidx.compose.animation.core.tween(2400, easing = androidx.compose.animation.core.LinearEasing),
+        ),
+        label = "hwRingAngle",
+    )
+    val rainbow = listOf(
+        Color(0xFFE53935), Color(0xFFFB8C00), Color(0xFFFDD835), Color(0xFF43A047),
+        Color(0xFF1E88E5), Color(0xFF8E24AA), Color(0xFFE53935),
+    )
+
     Scaffold(
         bottomBar = {
             NavigationBar {
@@ -453,7 +470,28 @@ private fun HomeScreen(
                     NavigationBarItem(
                         selected = tab == i,
                         onClick = { tab = i },
-                        icon = { Text(spec.emoji, fontSize = 24.sp) },
+                        icon = {
+                            Box(
+                                contentAlignment = Alignment.Center,
+                                modifier = Modifier
+                                    .size(44.dp)
+                                    .then(
+                                        if (hasHomework) {
+                                            Modifier.drawBehind {
+                                                androidx.compose.ui.graphics.drawscope.rotate(ringAngle) {
+                                                    drawCircle(
+                                                        brush = androidx.compose.ui.graphics.Brush.sweepGradient(rainbow),
+                                                        radius = size.minDimension / 2 - 3.dp.toPx(),
+                                                        style = androidx.compose.ui.graphics.drawscope.Stroke(width = 5.dp.toPx()),
+                                                    )
+                                                }
+                                            }
+                                        } else {
+                                            Modifier
+                                        },
+                                    ),
+                            ) { Text(spec.emoji, fontSize = 24.sp) }
+                        },
                         label = { Text(if (hasHomework) "🌟 ${spec.title}" else spec.title, fontSize = 14.sp) },
                     )
                 }
