@@ -90,9 +90,11 @@ class SoundBox {
         val duty: Double,
         val melody: List<Pair<Int?, Int>>,
         val bass: List<Pair<Int?, Int>>,
+        /** 'K' kick, 'S' snare, 'h' hat, '-' rest; one char per unit. */
+        val drums: String = "",
     )
 
-    private val songs = listOf(
+    private val baseSongs = listOf(
         // Bright I-vi-IV-V runner in C.
         Chiptune(
             name = "Sunny Run", unitMs = 110, duty = 0.25,
@@ -153,6 +155,70 @@ class SoundBox {
         ),
     )
 
+    private val moreSongs = listOf(
+        // Pop: I-V-vi-IV hook with a steady four-on-the-floor kick.
+        Chiptune(
+            name = "Bubblegum Pop", unitMs = 110, duty = 0.5,
+            melody = listOf(
+                7 to 1, 7 to 1, 5 to 1, 3 to 1, 10 to 1, 10 to 1, 7 to 2,
+                12 to 1, 12 to 1, 10 to 1, 7 to 1, 5 to 1, 7 to 1, 3 to 2,
+                7 to 1, 8 to 1, 10 to 1, 12 to 1, 15 to 2, 12 to 1, 10 to 1,
+                8 to 1, 10 to 1, 12 to 1, 8 to 1, 7 to 2, 5 to 2,
+            ),
+            bass = listOf(
+                -21 to 2, -21 to 2, -14 to 2, -14 to 2,
+                -12 to 2, -12 to 2, -16 to 2, -16 to 2,
+            ),
+            drums = "KhShKhShKhShKhSh",
+        ),
+        // Rock: minor-pentatonic riff, driving bass, backbeat snare.
+        Chiptune(
+            name = "Rock Robot", unitMs = 105, duty = 0.25,
+            melody = listOf(
+                0 to 1, 3 to 1, 5 to 1, 7 to 2, 5 to 1, 3 to 1, 0 to 1,
+                0 to 1, 3 to 1, 5 to 1, 8 to 2, 7 to 1, 5 to 1, 3 to 1,
+                10 to 2, 8 to 1, 7 to 1, 5 to 1, 3 to 1, 5 to 2,
+                0 to 1, 3 to 1, 0 to 1, -2 to 1, 0 to 4,
+            ),
+            bass = listOf(
+                -24 to 1, -24 to 1, -24 to 1, -24 to 1, -21 to 1, -21 to 1, -24 to 1, -24 to 1,
+                -17 to 1, -17 to 1, -16 to 1, -16 to 1, -14 to 1, -14 to 1, -24 to 1, -24 to 1,
+            ),
+            drums = "K-S-K-S-K-S-KKS-",
+        ),
+        // Hip-hop: sparse hook, syncopated bass, boom-bap pattern.
+        Chiptune(
+            name = "Beat Bot", unitMs = 150, duty = 0.125,
+            melody = listOf(
+                12 to 1, null to 1, 10 to 1, 12 to 1, null to 2, 7 to 1, null to 1,
+                12 to 1, null to 1, 15 to 1, 12 to 1, 10 to 2, null to 2,
+                8 to 1, null to 1, 7 to 1, 8 to 1, null to 2, 3 to 1, null to 1,
+                5 to 1, 7 to 1, null to 1, 3 to 1, 0 to 2, null to 2,
+            ),
+            bass = listOf(
+                -24 to 2, null to 1, -24 to 1, -12 to 2, null to 2,
+                -16 to 2, null to 1, -16 to 1, -14 to 2, -12 to 2,
+            ),
+            drums = "K--SK--SK-KSK--S",
+        ),
+        // R&B: slow groove, 7th-chord arpeggios, gentle backbeat.
+        Chiptune(
+            name = "Smooth Star", unitMs = 170, duty = 0.5,
+            melody = listOf(
+                3 to 1, 7 to 1, 10 to 1, 14 to 1, 12 to 2, 10 to 1, 7 to 1,
+                0 to 1, 3 to 1, 7 to 1, 12 to 1, 10 to 2, 8 to 2,
+                1 to 1, 5 to 1, 8 to 1, 12 to 1, 10 to 1, 8 to 1, 5 to 2,
+                7 to 1, 8 to 1, 10 to 1, 7 to 1, 3 to 4,
+            ),
+            bass = listOf(
+                -21 to 4, -24 to 4, -16 to 4, -14 to 2, -12 to 2,
+            ),
+            drums = "K---S---K--KS---",
+        ),
+    )
+
+    private val songs: List<Chiptune> by lazy { baseSongs + moreSongs }
+
     private var songIndex = 0
 
     val currentSongName: String
@@ -193,14 +259,66 @@ class SoundBox {
 
         renderLine(song.melody, isBass = false)
         renderLine(song.bass, isBass = true)
+
+        if (song.drums.isNotEmpty()) {
+            val unitLen = SAMPLE_RATE * song.unitMs / 1000
+            val noise = java.util.Random(42)
+            var pos = 0
+            var di = 0
+            while (pos < total) {
+                when (song.drums[di % song.drums.length]) {
+                    'K' -> {
+                        // kick: quick pitch drop with hard decay
+                        val len = min(unitLen, SAMPLE_RATE / 12)
+                        for (i in 0 until len) {
+                            val t = i.toDouble() / len
+                            val freq = 110.0 - 70.0 * t
+                            val s = sin(2 * PI * freq * i / SAMPLE_RATE) * (1 - t) * 0.5
+                            val mixed = out[pos + i] + (s * Short.MAX_VALUE).toInt()
+                            out[pos + i] = mixed.coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt()).toShort()
+                        }
+                    }
+                    'S' -> {
+                        val len = min(unitLen, SAMPLE_RATE / 14)
+                        for (i in 0 until len) {
+                            val t = i.toDouble() / len
+                            val s = (noise.nextDouble() * 2 - 1) * (1 - t) * 0.3
+                            val mixed = out[pos + i] + (s * Short.MAX_VALUE).toInt()
+                            out[pos + i] = mixed.coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt()).toShort()
+                        }
+                    }
+                    'h' -> {
+                        val len = min(unitLen, SAMPLE_RATE / 40)
+                        for (i in 0 until len) {
+                            val t = i.toDouble() / len
+                            val s = (noise.nextDouble() * 2 - 1) * (1 - t) * 0.12
+                            val mixed = out[pos + i] + (s * Short.MAX_VALUE).toInt()
+                            out[pos + i] = mixed.coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt()).toShort()
+                        }
+                    }
+                }
+                pos += unitLen
+                di++
+                if (pos + unitLen > total) break
+            }
+        }
         return out
     }
 
     fun startMusic() {
         if (musicTrack != null) return
-        musicTrack = buildTrack(renderSong(songs[songIndex]), loop = true).also {
-            it.setVolume(musicVolume)
-            if (musicVolume > 0f) it.play()
+        val pcm = renderSong(songs[songIndex])
+        // Play once; the end-of-track marker advances to the next song.
+        musicTrack = buildTrack(pcm, loop = false).also { track ->
+            track.notificationMarkerPosition = pcm.size
+            track.setPlaybackPositionUpdateListener(object : AudioTrack.OnPlaybackPositionUpdateListener {
+                override fun onMarkerReached(t: AudioTrack?) {
+                    nextSong()
+                }
+                override fun onPeriodicNotification(t: AudioTrack?) {}
+            })
+            track.setVolume(musicVolume)
+            if (musicVolume > 0f) track.play()
         }
     }
 

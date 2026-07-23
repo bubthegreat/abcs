@@ -1024,6 +1024,7 @@ private fun ProfileDialog(
     )
 }
 
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 private fun ParentScreen(vm: AppViewModel, state: AppState, audio: AudioBox, onClose: () -> Unit) {
     var deleteTarget by remember { mutableStateOf<us.jmresearch.abcflashcards.data.Profile?>(null) }
@@ -1091,41 +1092,35 @@ private fun ParentScreen(vm: AppViewModel, state: AppState, audio: AudioBox, onC
     var birthdayTarget by remember { mutableStateOf<us.jmresearch.abcflashcards.data.Profile?>(null) }
 
     birthdayTarget?.let { target ->
-        var entry by remember(target.id) {
-            mutableStateOf(
-                target.birthdayEpochDay?.let { java.time.LocalDate.ofEpochDay(it).toString() } ?: "",
-            )
-        }
-        var bad by remember { mutableStateOf(false) }
-        AlertDialog(
+        val pickerState = androidx.compose.material3.rememberDatePickerState(
+            initialSelectedDateMillis = target.birthdayEpochDay?.let { it * 86_400_000L },
+        )
+        androidx.compose.material3.DatePickerDialog(
             onDismissRequest = { birthdayTarget = null },
-            title = { Text("${target.name}'s birthday") },
-            text = {
-                Column {
-                    Text("Used to auto-unlock age-appropriate decks.", fontSize = 14.sp)
-                    OutlinedTextField(
-                        value = entry,
-                        onValueChange = { entry = it; bad = false },
-                        label = { Text("YYYY-MM-DD") },
-                    )
-                    if (bad) Text("Use YYYY-MM-DD, like 2019-05-24", color = Color(0xFFD32F2F), fontSize = 13.sp)
-                }
-            },
             confirmButton = {
                 TextButton(
                     onClick = {
-                        try {
-                            val day = java.time.LocalDate.parse(entry.trim()).toEpochDay()
-                            vm.setBirthday(target.id, day)
-                            birthdayTarget = null
-                        } catch (e: Exception) {
-                            bad = true
+                        pickerState.selectedDateMillis?.let { millis ->
+                            vm.setBirthday(target.id, millis / 86_400_000L)
                         }
+                        birthdayTarget = null
                     },
+                    enabled = pickerState.selectedDateMillis != null,
                 ) { Text("Save") }
             },
             dismissButton = { TextButton(onClick = { birthdayTarget = null }) { Text("Cancel") } },
-        )
+        ) {
+            androidx.compose.material3.DatePicker(
+                state = pickerState,
+                title = {
+                    Text(
+                        "${target.name}'s birthday",
+                        fontSize = 18.sp,
+                        modifier = Modifier.padding(start = 24.dp, top = 16.dp),
+                    )
+                },
+            )
+        }
     }
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
