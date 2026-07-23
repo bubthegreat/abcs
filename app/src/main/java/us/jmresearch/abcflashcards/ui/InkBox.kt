@@ -43,10 +43,17 @@ class InkBox {
     }
 
     /** Best-candidate text for the drawn strokes, or null when nothing recognizable. */
-    suspend fun recognize(ink: Ink): String? {
+    suspend fun recognize(ink: Ink, areaWidth: Float = 0f, areaHeight: Float = 0f, preContext: String = ""): String? {
         if (!_modelReady.value || ink.strokes.isEmpty()) return null
         return try {
-            recognizer.recognize(ink).await()
+            val contextBuilder = com.google.mlkit.vision.digitalink.RecognitionContext.builder()
+                .setPreContext(preContext.takeLast(20))
+            if (areaWidth > 0 && areaHeight > 0) {
+                contextBuilder.setWritingArea(
+                    com.google.mlkit.vision.digitalink.WritingArea(areaWidth, areaHeight),
+                )
+            }
+            recognizer.recognize(ink, contextBuilder.build()).await()
                 .candidates.firstOrNull()?.text?.trim()?.takeIf { it.isNotBlank() }
         } catch (e: Exception) {
             null

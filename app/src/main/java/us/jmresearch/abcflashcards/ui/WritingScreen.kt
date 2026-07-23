@@ -69,7 +69,9 @@ fun WritingScreen(audio: AudioBox, ink: InkBox, onStoryFinished: () -> Unit) {
 
     fun clearCanvas() = strokes.clear()
 
-    fun addRecognizedWord() {
+    var canvasSize by remember { mutableStateOf(Offset.Zero) }
+
+    fun addRecognizedText() {
         if (strokes.isEmpty() || recognizing) return
         recognizing = true
         scope.launch {
@@ -81,7 +83,12 @@ fun WritingScreen(audio: AudioBox, ink: InkBox, onStoryFinished: () -> Unit) {
                 }
                 builder.addStroke(sb.build())
             }
-            val text = ink.recognize(builder.build())
+            val text = ink.recognize(
+                builder.build(),
+                areaWidth = canvasSize.x,
+                areaHeight = canvasSize.y,
+                preContext = current,
+            )
             if (text != null) {
                 current = (current.trim() + " " + text.lowercase()).trim()
                 warning = null
@@ -147,7 +154,7 @@ fun WritingScreen(audio: AudioBox, ink: InkBox, onStoryFinished: () -> Unit) {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(220.dp)
+                    .height(360.dp)
                     .background(Color(0xFFFFFDF5), RoundedCornerShape(12.dp))
                     .border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(12.dp)),
             ) {
@@ -171,6 +178,23 @@ fun WritingScreen(audio: AudioBox, ink: InkBox, onStoryFinished: () -> Unit) {
                             )
                         },
                 ) {
+                    canvasSize = Offset(size.width, size.height)
+                    // Kid handwriting-guide paper: 3 ruled rows, each with a solid
+                    // sky-blue top line, dashed pink midline, and solid blue baseline.
+                    val rows = 3
+                    val rowGap = 24f
+                    val rowHeight = (size.height - rowGap * (rows + 1)) / rows
+                    val blue = Color(0xFF90CAF9)
+                    val pink = Color(0xFFF48FB1)
+                    val dash = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(18f, 14f))
+                    repeat(rows) { r ->
+                        val top = rowGap + r * (rowHeight + rowGap)
+                        val mid = top + rowHeight / 2
+                        val base = top + rowHeight
+                        drawLine(blue, Offset(24f, top), Offset(size.width - 24f, top), strokeWidth = 3f)
+                        drawLine(pink, Offset(24f, mid), Offset(size.width - 24f, mid), strokeWidth = 3f, pathEffect = dash)
+                        drawLine(blue, Offset(24f, base), Offset(size.width - 24f, base), strokeWidth = 4f)
+                    }
                     strokes.forEach { s ->
                         if (s.points.size > 1) {
                             val path = Path().apply {
@@ -183,7 +207,7 @@ fun WritingScreen(audio: AudioBox, ink: InkBox, onStoryFinished: () -> Unit) {
                 }
                 if (strokes.isEmpty()) {
                     Text(
-                        "Write a word here with your pen or finger",
+                        "Write your sentence on the lines ✏️",
                         color = Color.LightGray,
                         modifier = Modifier.align(Alignment.Center),
                     )
@@ -194,10 +218,10 @@ fun WritingScreen(audio: AudioBox, ink: InkBox, onStoryFinished: () -> Unit) {
                 modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
             ) {
                 Button(
-                    onClick = { addRecognizedWord() },
+                    onClick = { addRecognizedText() },
                     enabled = strokes.isNotEmpty() && !recognizing,
                     modifier = Modifier.weight(1f).height(56.dp),
-                ) { Text(if (recognizing) "…" else "✓ Add word", fontSize = 16.sp) }
+                ) { Text(if (recognizing) "…" else "✓ Read my writing", fontSize = 16.sp) }
                 TextButton(onClick = { clearCanvas() }) { Text("Clear") }
                 TextButton(
                     onClick = {
