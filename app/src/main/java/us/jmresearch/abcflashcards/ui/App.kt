@@ -65,7 +65,7 @@ private val tabs = listOf(
 )
 
 @Composable
-fun App(vm: AppViewModel) {
+fun App(vm: AppViewModel, audio: AudioBox) {
     val state by vm.state.collectAsState()
     var screen by remember { mutableStateOf("home") } // "home" | "deck" | "parent"
 
@@ -78,11 +78,11 @@ fun App(vm: AppViewModel) {
         )
         "deck" -> {
             BackHandler { vm.closeDeck(); screen = "home" }
-            DeckScreen(vm = vm, state = state, onClose = { vm.closeDeck(); screen = "home" })
+            DeckScreen(vm = vm, state = state, audio = audio, onClose = { vm.closeDeck(); screen = "home" })
         }
         "parent" -> {
             BackHandler { screen = "home" }
-            ParentScreen(vm = vm, state = state, onClose = { screen = "home" })
+            ParentScreen(vm = vm, state = state, audio = audio, onClose = { screen = "home" })
         }
     }
 }
@@ -194,7 +194,7 @@ private fun DeckTile(status: DeckStatus, color: Color, onDeckTap: (String) -> Un
 }
 
 @Composable
-private fun DeckScreen(vm: AppViewModel, state: AppState, onClose: () -> Unit) {
+private fun DeckScreen(vm: AppViewModel, state: AppState, audio: AudioBox, onClose: () -> Unit) {
     val card by vm.currentCard.collectAsState()
     val openDeckId by vm.openDeckId.collectAsState()
     val reviewMode by vm.reviewMode.collectAsState()
@@ -260,6 +260,15 @@ private fun DeckScreen(vm: AppViewModel, state: AppState, onClose: () -> Unit) {
         }
         val c = card
         if (c != null && status != null) {
+            Button(
+                onClick = {
+                    audio.play(
+                        us.jmresearch.abcflashcards.data.recordingKeyFor(c.id),
+                        us.jmresearch.abcflashcards.data.utteranceFor(c, status.deck),
+                    )
+                },
+                modifier = Modifier.padding(bottom = 8.dp).height(56.dp),
+            ) { Text("🔊 Hear it", fontSize = 18.sp) }
             Row(
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 modifier = Modifier.padding(bottom = 12.dp),
@@ -323,6 +332,78 @@ private fun CelebrationScreen(deckTitle: String, onKeepPracticing: () -> Unit, o
 }
 
 @Composable
+private fun LetterRecordings(audio: AudioBox) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    var recordingLetter by remember { mutableStateOf<Char?>(null) }
+    var refresh by remember { mutableStateOf(0) }
+    var hasMicPermission by remember {
+        mutableStateOf(
+            androidx.core.content.ContextCompat.checkSelfPermission(
+                context, android.Manifest.permission.RECORD_AUDIO,
+            ) == android.content.pm.PackageManager.PERMISSION_GRANTED,
+        )
+    }
+    val permissionLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.RequestPermission(),
+    ) { granted -> hasMicPermission = granted }
+
+    Column(modifier = Modifier.padding(top = 16.dp)) {
+        Text("Letter sounds — record your voice", fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+        Text(
+            "Say the SOUND, not the letter name. Tap ⏺, read the prompt out loud, tap ⏹.",
+            fontSize = 13.sp,
+            color = Color.Gray,
+            modifier = Modifier.padding(bottom = 4.dp),
+        )
+        if (!hasMicPermission) {
+            Button(onClick = { permissionLauncher.launch(android.Manifest.permission.RECORD_AUDIO) }) {
+                Text("Allow microphone to record")
+            }
+        } else {
+            ('a'..'z').forEach { letter ->
+                val itemId = "letter_$letter"
+                val recorded = remember(refresh) { audio.hasRecording(itemId) }
+                val isRecording = recordingLetter == letter
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
+                ) {
+                    Text(
+                        letter.uppercaseChar().toString(),
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(end = 12.dp),
+                    )
+                    Text(
+                        us.jmresearch.abcflashcards.data.letterRecordingPrompts[letter] ?: "",
+                        fontSize = 14.sp,
+                        color = if (isRecording) MaterialTheme.colorScheme.primary else Color.Gray,
+                        fontWeight = if (isRecording) FontWeight.Bold else FontWeight.Normal,
+                        modifier = Modifier.weight(1f),
+                    )
+                    if (recorded && !isRecording) {
+                        TextButton(onClick = { audio.play(itemId, "") }) { Text("▶") }
+                        TextButton(onClick = { audio.deleteRecording(itemId); refresh++ }) { Text("🗑") }
+                    }
+                    TextButton(
+                        onClick = {
+                            if (isRecording) {
+                                audio.stopRecording()
+                                recordingLetter = null
+                                refresh++
+                            } else {
+                                audio.stopRecording()
+                                recordingLetter = if (audio.startRecording(itemId)) letter else null
+                            }
+                        },
+                    ) { Text(if (isRecording) "⏹ Stop" else "⏺", fontSize = 18.sp) }
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun ProfileDialog(vm: AppViewModel, state: AppState, onDismiss: () -> Unit) {
     var newName by remember { mutableStateOf("") }
     AlertDialog(
@@ -369,7 +450,7 @@ private fun ProfileDialog(vm: AppViewModel, state: AppState, onDismiss: () -> Un
 }
 
 @Composable
-private fun ParentScreen(vm: AppViewModel, state: AppState, onClose: () -> Unit) {
+private fun ParentScreen(vm: AppViewModel, state: AppState, audio: AudioBox, onClose: () -> Unit) {
     var resetTarget by remember { mutableStateOf<DeckStatus?>(null) }
     var deleteTarget by remember { mutableStateOf<us.jmresearch.abcflashcards.data.Profile?>(null) }
     var renameTarget by remember { mutableStateOf<us.jmresearch.abcflashcards.data.Profile?>(null) }
@@ -496,6 +577,9 @@ private fun ParentScreen(vm: AppViewModel, state: AppState, onClose: () -> Unit)
                             TextButton(onClick = { vm.toggleForceUnlock(status.deck.id) }) { Text("Unlock") }
                     }
                 }
+            }
+            item {
+                LetterRecordings(audio)
             }
             item {
                 Text("Kids", fontSize = 16.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 16.dp))
