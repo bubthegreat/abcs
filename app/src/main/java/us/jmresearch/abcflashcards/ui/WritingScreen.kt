@@ -180,11 +180,28 @@ fun WritingScreen(vm: AppViewModel, audio: AudioBox, ink: InkBox) {
             return@Column
         }
 
-        preview?.let {
-            Text("I read: \"$it\"", fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
-        }
-        warning?.let {
-            Text(it, color = Color(0xFFD32F2F), fontSize = 15.sp, fontWeight = FontWeight.Bold)
+        // Fixed-height message area: appearing text must never resize the canvas
+        // below it, or the ink shifts against the ruled lines.
+        Column(modifier = Modifier.fillMaxWidth().height(52.dp)) {
+            preview?.let {
+                Text(
+                    "I read: \"$it\"",
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                )
+            }
+            warning?.let {
+                Text(
+                    it,
+                    color = Color(0xFFD32F2F),
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                )
+            }
         }
 
         if (!modelReady) {
