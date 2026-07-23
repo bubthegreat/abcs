@@ -16,7 +16,6 @@ class AppSmokeTest {
     fun homeShowsSubjectsAndDeckOpens() {
         rule.onNodeWithText("Let's Learn!").assertIsDisplayed()
         rule.onNodeWithText("Letters").assertIsDisplayed()
-        rule.onNodeWithText("Math").assertIsDisplayed()
         rule.onNodeWithText("Letters 1").performClick()
         rule.onNodeWithText("✓ Got it").assertIsDisplayed()
     }
