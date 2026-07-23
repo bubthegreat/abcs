@@ -20,8 +20,10 @@ import us.jmresearch.abcflashcards.data.Deck
 import us.jmresearch.abcflashcards.data.ItemProgress
 import us.jmresearch.abcflashcards.data.Profile
 import us.jmresearch.abcflashcards.data.ProgressStore
+import us.jmresearch.abcflashcards.engine.Quiz
 import us.jmresearch.abcflashcards.engine.applyCorrect
 import us.jmresearch.abcflashcards.engine.applyWrong
+import us.jmresearch.abcflashcards.engine.buildQuiz
 import us.jmresearch.abcflashcards.engine.isDeckUnlocked
 import us.jmresearch.abcflashcards.engine.isMastered
 import us.jmresearch.abcflashcards.engine.pickNext
@@ -35,7 +37,28 @@ data class AppState(
     val progress: Map<String, ItemProgress> = emptyMap(),
     val profiles: List<Profile> = emptyList(),
     val activeProfileId: String = "p1",
+    val starBank: Int = 0,
+    val starProgress: Int = 0,
+    val kidMode: Boolean = false,
+    val parentPin: String? = null,
 )
+
+private data class Core(
+    val progress: Map<String, ItemProgress>,
+    val threshold: Int,
+    val force: Set<String>,
+)
+
+private data class Profs(val profiles: List<Profile>, val activeId: String)
+
+private data class KidBits(
+    val bank: Int,
+    val starProgress: Int,
+    val kidMode: Boolean,
+    val pin: String?,
+)
+
+const val CORRECTS_PER_STAR = 10
 
 class AppViewModel(private val store: ProgressStore) : ViewModel() {
 
@@ -43,18 +66,32 @@ class AppViewModel(private val store: ProgressStore) : ViewModel() {
 
     val state: StateFlow<AppState> =
         combine(
-            store.progress, store.threshold, store.forceUnlocked,
-            store.profiles, store.activeProfileId,
-        ) { progress, threshold, force, profiles, activePid ->
+            combine(store.progress, store.threshold, store.forceUnlocked) { p, t, f -> Core(p, t, f) },
+            combine(store.profiles, store.activeProfileId) { pr, id -> Profs(pr, id) },
+            combine(store.starBank, store.starProgress, store.kidMode, store.parentPin) { b, s, k, pin ->
+                KidBits(b, s, k, pin)
+            },
+        ) { core, profs, kid ->
             val statuses = Curriculum.decks.map { deck ->
                 DeckStatus(
                     deck = deck,
-                    unlocked = isDeckUnlocked(deck, Curriculum.decks, progress, threshold, force),
-                    masteredCount = deck.items.count { isMastered(progress[it.id], threshold) },
+                    unlocked = isDeckUnlocked(deck, Curriculum.decks, core.progress, core.threshold, core.force),
+                    masteredCount = deck.items.count { isMastered(core.progress[it.id], core.threshold) },
                     total = deck.items.size,
                 )
             }
-            AppState(statuses, threshold, force, progress, profiles, activePid)
+            AppState(
+                deckStatuses = statuses,
+                threshold = core.threshold,
+                forceUnlocked = core.force,
+                progress = core.progress,
+                profiles = profs.profiles,
+                activeProfileId = profs.activeId,
+                starBank = kid.bank,
+                starProgress = kid.starProgress,
+                kidMode = kid.kidMode,
+                parentPin = kid.pin,
+            )
         }.stateIn(viewModelScope, SharingStarted.Eagerly, AppState())
 
     private val _openDeckId = MutableStateFlow<String?>(null)
@@ -63,9 +100,14 @@ class AppViewModel(private val store: ProgressStore) : ViewModel() {
     private val _currentCard = MutableStateFlow<CardItem?>(null)
     val currentCard: StateFlow<CardItem?> = _currentCard
 
+    private val _currentQuiz = MutableStateFlow<Quiz?>(null)
+    val currentQuiz: StateFlow<Quiz?> = _currentQuiz
+
     /** True once the parent tapped "Keep practicing" on a fully mastered deck. */
     private val _reviewMode = MutableStateFlow(false)
     val reviewMode: StateFlow<Boolean> = _reviewMode
+
+    private var wrongAlreadyThisCard = false
 
     private fun deckById(id: String?): Deck? = Curriculum.decks.firstOrNull { it.id == id }
 
@@ -78,6 +120,7 @@ class AppViewModel(private val store: ProgressStore) : ViewModel() {
     fun closeDeck() {
         _openDeckId.value = null
         _currentCard.value = null
+        _currentQuiz.value = null
         _reviewMode.value = false
     }
 
@@ -89,13 +132,16 @@ class AppViewModel(private val store: ProgressStore) : ViewModel() {
     private fun advance(lastShownId: String?) {
         val deck = deckById(_openDeckId.value) ?: return
         val s = state.value
-        _currentCard.value = if (_reviewMode.value) {
+        wrongAlreadyThisCard = false
+        val next = if (_reviewMode.value) {
             // Review of a mastered deck: uniform random over the whole deck, so it
             // doesn't ping-pong between the two oldest-seen items.
             pickNext(deck.items, emptyMap(), s.threshold, lastShownId, random)
         } else {
             pickNext(deck.items, s.progress, s.threshold, lastShownId, random)
         }
+        _currentCard.value = next
+        _currentQuiz.value = next?.let { buildQuiz(it, deck, random) }
     }
 
     fun markCorrect() = mark(::applyCorrect)
@@ -107,6 +153,28 @@ class AppViewModel(private val store: ProgressStore) : ViewModel() {
         viewModelScope.launch {
             store.updateItem(card.id) { transform(it, today) }
             advance(lastShownId = card.id)
+        }
+    }
+
+    /** Kid mode: correct tap. Advances and feeds the star bank. */
+    fun quizCorrect() {
+        val card = _currentCard.value ?: return
+        val today = LocalDate.now().toEpochDay()
+        viewModelScope.launch {
+            store.updateItem(card.id) { applyCorrect(it, today) }
+            store.recordKidCorrect(CORRECTS_PER_STAR)
+            advance(lastShownId = card.id)
+        }
+    }
+
+    /** Kid mode: wrong tap. Walks mastery back once per card; card stays up for retry. */
+    fun quizWrong() {
+        if (wrongAlreadyThisCard) return
+        wrongAlreadyThisCard = true
+        val card = _currentCard.value ?: return
+        val today = LocalDate.now().toEpochDay()
+        viewModelScope.launch {
+            store.updateItem(card.id) { applyWrong(it, today) }
         }
     }
 
@@ -144,6 +212,27 @@ class AppViewModel(private val store: ProgressStore) : ViewModel() {
 
     fun deleteProfile(id: String) {
         viewModelScope.launch { store.deleteProfile(id) }
+    }
+
+    fun setPin(pin: String) {
+        viewModelScope.launch { store.setPin(pin) }
+    }
+
+    fun enterKidMode() {
+        closeDeck()
+        viewModelScope.launch { store.setKidMode(true) }
+    }
+
+    /** Returns false when the pin doesn't match; kid mode stays on. */
+    fun exitKidMode(pin: String): Boolean {
+        if (pin != state.value.parentPin) return false
+        closeDeck()
+        viewModelScope.launch { store.setKidMode(false) }
+        return true
+    }
+
+    fun redeemStars(count: Int) {
+        viewModelScope.launch { store.redeemStars(count) }
     }
 
     companion object {

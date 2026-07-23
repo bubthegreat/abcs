@@ -22,6 +22,8 @@ class AudioBox(private val context: Context) {
         tts = TextToSpeech(context) { status ->
             if (status == TextToSpeech.SUCCESS) {
                 tts?.language = Locale.US
+                // Slow, clear speech so word-final consonants ("cat", "sit") aren't clipped.
+                tts?.setSpeechRate(0.7f)
                 ttsReady = true
             }
         }

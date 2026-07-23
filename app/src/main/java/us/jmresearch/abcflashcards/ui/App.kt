@@ -46,6 +46,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.launch
 import us.jmresearch.abcflashcards.data.Subject
 
 private val subjectColors = mapOf(
@@ -69,6 +70,11 @@ fun App(vm: AppViewModel, audio: AudioBox) {
     val state by vm.state.collectAsState()
     var screen by remember { mutableStateOf("home") } // "home" | "deck" | "parent"
 
+    if (state.kidMode) {
+        KidMode(vm = vm, state = state, audio = audio)
+        return
+    }
+
     when (screen) {
         "home" -> HomeScreen(
             vm = vm,
@@ -88,6 +94,248 @@ fun App(vm: AppViewModel, audio: AudioBox) {
 }
 
 @Composable
+private fun KidMode(vm: AppViewModel, state: AppState, audio: AudioBox) {
+    val openDeckId by vm.openDeckId.collectAsState()
+    var showExitDialog by remember { mutableStateOf(false) }
+
+    if (showExitDialog) {
+        PinDialog(
+            title = "Parents only!",
+            onSubmit = { pin ->
+                if (vm.exitKidMode(pin)) showExitDialog = false
+                vm.exitKidMode(pin)
+            },
+            onDismiss = { showExitDialog = false },
+        )
+    }
+
+    if (openDeckId == null) {
+        BackHandler { /* stay in kid mode; exit only via PIN */ }
+        KidHome(
+            vm = vm,
+            state = state,
+            onDeckTap = { vm.openDeck(it) },
+            onExitTap = { showExitDialog = true },
+        )
+    } else {
+        BackHandler { vm.closeDeck() }
+        QuizScreen(vm = vm, state = state, audio = audio, onClose = { vm.closeDeck() })
+    }
+}
+
+@Composable
+private fun PinDialog(title: String, onSubmit: (String) -> Boolean, onDismiss: () -> Unit) {
+    var entry by remember { mutableStateOf("") }
+    var wrong by remember { mutableStateOf(false) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = {
+            Column {
+                OutlinedTextField(
+                    value = entry,
+                    onValueChange = { if (it.length <= 4 && it.all(Char::isDigit)) entry = it },
+                    label = { Text("4-digit PIN") },
+                )
+                if (wrong) Text("Wrong PIN", color = Color(0xFFD32F2F))
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { if (!onSubmit(entry)) { wrong = true; entry = "" } }) { Text("OK") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
+}
+
+@Composable
+private fun SetPinDialog(onSet: (String) -> Unit, onDismiss: () -> Unit) {
+    var entry by remember { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Set a parent PIN") },
+        text = {
+            Column {
+                Text("Needed to leave kid mode later.", fontSize = 14.sp)
+                OutlinedTextField(
+                    value = entry,
+                    onValueChange = { if (it.length <= 4 && it.all(Char::isDigit)) entry = it },
+                    label = { Text("4-digit PIN") },
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { if (entry.length == 4) onSet(entry) },
+            ) { Text("Save & start") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
+}
+
+@Composable
+private fun StarBar(state: AppState, onExitTap: (() -> Unit)? = null) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+    ) {
+        Text("⭐ ${state.starBank}", fontSize = 24.sp, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.padding(horizontal = 8.dp))
+        LinearProgressIndicator(
+            progress = { state.starProgress / CORRECTS_PER_STAR.toFloat() },
+            modifier = Modifier.weight(1f).height(10.dp),
+        )
+        Spacer(Modifier.padding(horizontal = 8.dp))
+        Text("${state.starProgress}/$CORRECTS_PER_STAR", fontSize = 14.sp, color = Color.Gray)
+        if (onExitTap != null) {
+            TextButton(onClick = onExitTap) { Text("👨‍👩‍👧", fontSize = 20.sp) }
+        }
+    }
+}
+
+@Composable
+private fun KidHome(vm: AppViewModel, state: AppState, onDeckTap: (String) -> Unit, onExitTap: () -> Unit) {
+    var tab by remember { mutableStateOf(0) }
+    Scaffold(
+        bottomBar = {
+            NavigationBar {
+                tabs.forEachIndexed { i, spec ->
+                    NavigationBarItem(
+                        selected = tab == i,
+                        onClick = { tab = i },
+                        icon = { Text(spec.emoji, fontSize = 24.sp) },
+                        label = { Text(spec.title, fontSize = 14.sp) },
+                    )
+                }
+            }
+        },
+    ) { padding ->
+        Column(modifier = Modifier.fillMaxSize().padding(padding)) {
+            StarBar(state, onExitTap)
+            val spec = tabs[tab]
+            val decks = state.deckStatuses.filter { it.deck.subject == spec.subject }
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(2),
+                modifier = Modifier.fillMaxSize().padding(horizontal = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                items(decks, key = { it.deck.id }) { status ->
+                    DeckTile(status, subjectColors.getValue(spec.subject), onDeckTap)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun QuizScreen(vm: AppViewModel, state: AppState, audio: AudioBox, onClose: () -> Unit) {
+    val quiz by vm.currentQuiz.collectAsState()
+    val openDeckId by vm.openDeckId.collectAsState()
+    val reviewMode by vm.reviewMode.collectAsState()
+    var wrongChoices by remember { mutableStateOf(setOf<String>()) }
+    var flashCorrect by remember { mutableStateOf(false) }
+
+    val status = state.deckStatuses.firstOrNull { it.deck.id == openDeckId }
+    val complete = status != null && status.masteredCount == status.total && status.total > 0
+
+    if (complete && !reviewMode) {
+        CelebrationScreen(
+            deckTitle = status!!.deck.title,
+            onKeepPracticing = { vm.keepPracticing() },
+            onClose = onClose,
+        )
+        return
+    }
+
+    val q = quiz
+    androidx.compose.runtime.LaunchedEffect(q?.item?.id) {
+        wrongChoices = emptySet()
+        flashCorrect = false
+        q?.let {
+            audio.play(
+                us.jmresearch.abcflashcards.data.recordingKeyFor(it.item.id),
+                it.spokenPrompt,
+            )
+        }
+    }
+
+    Column(
+        modifier = Modifier.fillMaxSize().padding(16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+            TextButton(onClick = onClose) { Text("← Back", fontSize = 18.sp) }
+            Spacer(Modifier.weight(1f))
+            Text("⭐ ${state.starBank}  ·  ${state.starProgress}/$CORRECTS_PER_STAR", fontSize = 16.sp)
+        }
+        Box(
+            modifier = Modifier.fillMaxWidth().weight(1f),
+            contentAlignment = Alignment.Center,
+        ) {
+            when {
+                q == null -> Text("All Done! 🎉", fontSize = 40.sp, fontWeight = FontWeight.Bold)
+                flashCorrect -> Text("🎉", fontSize = 96.sp)
+                q.visualPrompt != null -> Text(
+                    q.visualPrompt!!,
+                    fontSize = if (q.visualPrompt!!.length > 8) 44.sp else 80.sp,
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Center,
+                    lineHeight = 88.sp,
+                )
+                else -> Button(
+                    onClick = {
+                        audio.play(
+                            us.jmresearch.abcflashcards.data.recordingKeyFor(q.item.id),
+                            q.spokenPrompt,
+                        )
+                    },
+                    modifier = Modifier.size(140.dp),
+                    shape = CircleShape,
+                ) { Text("🔊", fontSize = 48.sp) }
+            }
+        }
+        if (q != null && !flashCorrect) {
+            val scope = androidx.compose.runtime.rememberCoroutineScope()
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                q.choices.forEach { choice ->
+                    val disabled = choice in wrongChoices
+                    Button(
+                        onClick = {
+                            if (choice == q.answer) {
+                                flashCorrect = true
+                                audio.play("praise", listOf("Great job!", "You got it!", "Awesome!").random())
+                                scope.launch {
+                                    kotlinx.coroutines.delay(900)
+                                    vm.quizCorrect()
+                                }
+                            } else {
+                                wrongChoices = wrongChoices + choice
+                                vm.quizWrong()
+                                audio.play(
+                                    us.jmresearch.abcflashcards.data.recordingKeyFor(q.item.id),
+                                    q.spokenPrompt,
+                                )
+                            }
+                        },
+                        enabled = !disabled,
+                        modifier = Modifier.weight(1f).height(96.dp),
+                    ) {
+                        Text(
+                            choice,
+                            fontSize = if (choice.length > 8) 20.sp else 32.sp,
+                            textAlign = TextAlign.Center,
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun HomeScreen(
     vm: AppViewModel,
     state: AppState,
@@ -96,10 +344,18 @@ private fun HomeScreen(
 ) {
     var tab by remember { mutableStateOf(0) }
     var showProfiles by remember { mutableStateOf(false) }
+    var showSetPin by remember { mutableStateOf(false) }
     val activeProfile = state.profiles.firstOrNull { it.id == state.activeProfileId }
 
     if (showProfiles) {
         ProfileDialog(vm, state, onDismiss = { showProfiles = false })
+    }
+
+    if (showSetPin) {
+        SetPinDialog(
+            onSet = { pin -> vm.setPin(pin); vm.enterKidMode(); showSetPin = false },
+            onDismiss = { showSetPin = false },
+        )
     }
 
     Scaffold(
@@ -132,6 +388,9 @@ private fun HomeScreen(
                     fontWeight = FontWeight.Bold,
                 )
                 Spacer(Modifier.weight(1f))
+                Button(
+                    onClick = { if (state.parentPin == null) showSetPin = true else vm.enterKidMode() },
+                ) { Text("▶ Play!", fontSize = 16.sp) }
                 TextButton(onClick = onParentOpen) { Text("⚙️", fontSize = 22.sp) }
             }
             val spec = tabs[tab]
@@ -540,6 +799,20 @@ private fun ParentScreen(vm: AppViewModel, state: AppState, audio: AudioBox, onC
                     fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.padding(top = 8.dp),
                 )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                ) {
+                    Text(
+                        "⭐ Stars: ${state.starBank} (${state.starProgress}/$CORRECTS_PER_STAR to next)",
+                        fontSize = 16.sp,
+                        modifier = Modifier.weight(1f),
+                    )
+                    TextButton(
+                        onClick = { vm.redeemStars(1) },
+                        enabled = state.starBank > 0,
+                    ) { Text("Redeem 1") }
+                }
                 Text("Mastery threshold: ${state.threshold}", fontSize = 16.sp, modifier = Modifier.padding(top = 12.dp))
                 Slider(
                     value = state.threshold.toFloat(),

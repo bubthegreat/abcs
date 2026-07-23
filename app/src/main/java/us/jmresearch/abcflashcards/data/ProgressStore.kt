@@ -27,6 +27,10 @@ class ProgressStore(private val context: Context) {
     private fun progressKey(pid: String) = stringPreferencesKey("progress_v1_$pid")
     private fun thresholdKey(pid: String) = stringPreferencesKey("threshold_v1_$pid")
     private fun forceUnlockedKey(pid: String) = stringPreferencesKey("force_unlocked_v1_$pid")
+    private fun starBankKey(pid: String) = stringPreferencesKey("star_bank_v1_$pid")
+    private fun starProgressKey(pid: String) = stringPreferencesKey("star_progress_v1_$pid")
+    private val pinKey = stringPreferencesKey("parent_pin_v1")
+    private val kidModeKey = stringPreferencesKey("kid_mode_v1")
 
     private val safeData: Flow<Preferences> = context.dataStore.data
         .catch { emit(emptyPreferences()) }
@@ -98,6 +102,51 @@ class ProgressStore(private val context: Context) {
             if (unlocked) current.add(deckId) else current.remove(deckId)
             prefs[key] = current.joinToString(";")
         }
+    }
+
+    val starBank: Flow<Int> = safeData.map { prefs ->
+        prefs[starBankKey(activePid(prefs))]?.toIntOrNull() ?: 0
+    }
+
+    val starProgress: Flow<Int> = safeData.map { prefs ->
+        prefs[starProgressKey(activePid(prefs))]?.toIntOrNull() ?: 0
+    }
+
+    val parentPin: Flow<String?> = safeData.map { it[pinKey] }
+
+    val kidMode: Flow<Boolean> = safeData.map { it[kidModeKey] == "on" }
+
+    /** One correct answer in kid mode. Every [correctsPerStar] corrects banks a star. */
+    suspend fun recordKidCorrect(correctsPerStar: Int = 10) {
+        context.dataStore.edit { prefs ->
+            val pid = activePid(prefs)
+            val progress = (prefs[starProgressKey(pid)]?.toIntOrNull() ?: 0) + 1
+            if (progress >= correctsPerStar) {
+                val bank = prefs[starBankKey(pid)]?.toIntOrNull() ?: 0
+                prefs[starBankKey(pid)] = (bank + 1).toString()
+                prefs[starProgressKey(pid)] = "0"
+            } else {
+                prefs[starProgressKey(pid)] = progress.toString()
+            }
+        }
+    }
+
+    suspend fun redeemStars(count: Int) {
+        context.dataStore.edit { prefs ->
+            val pid = activePid(prefs)
+            val bank = prefs[starBankKey(pid)]?.toIntOrNull() ?: 0
+            prefs[starBankKey(pid)] = (bank - count).coerceAtLeast(0).toString()
+        }
+    }
+
+    suspend fun setPin(pin: String) {
+        context.dataStore.edit { prefs ->
+            if (pin.length == 4 && pin.all { it.isDigit() }) prefs[pinKey] = pin
+        }
+    }
+
+    suspend fun setKidMode(on: Boolean) {
+        context.dataStore.edit { it[kidModeKey] = if (on) "on" else "off" }
     }
 
     suspend fun resetAll() {
