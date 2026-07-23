@@ -249,6 +249,15 @@ private fun QuizScreen(vm: AppViewModel, state: AppState, audio: AudioBox, onClo
 
     val q = quiz
     val quizNonce by vm.quizNonce.collectAsState()
+
+    // Runs at screen level so it survives the answer buttons leaving composition.
+    androidx.compose.runtime.LaunchedEffect(flashCorrect) {
+        if (flashCorrect) {
+            kotlinx.coroutines.delay(900)
+            vm.quizCorrect()
+        }
+    }
+
     androidx.compose.runtime.LaunchedEffect(quizNonce) {
         wrongChoices = emptySet()
         flashCorrect = false
@@ -296,7 +305,6 @@ private fun QuizScreen(vm: AppViewModel, state: AppState, audio: AudioBox, onClo
             }
         }
         if (q != null && !flashCorrect) {
-            val scope = androidx.compose.runtime.rememberCoroutineScope()
             Row(
                 modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -308,10 +316,6 @@ private fun QuizScreen(vm: AppViewModel, state: AppState, audio: AudioBox, onClo
                             if (choice == q.answer) {
                                 flashCorrect = true
                                 audio.play("praise", listOf("Great job!", "You got it!", "Awesome!").random())
-                                scope.launch {
-                                    kotlinx.coroutines.delay(900)
-                                    vm.quizCorrect()
-                                }
                             } else {
                                 wrongChoices = wrongChoices + choice
                                 vm.quizWrong()
