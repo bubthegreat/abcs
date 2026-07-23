@@ -291,6 +291,7 @@ class AppViewModel(private val store: ProgressStore) : ViewModel() {
 
     /** Quiz: correct tap. Advances quiz progress; stars only on unearned homework. */
     fun quizCorrect() {
+        if (!quizSession) return // flashcards are practice — never stars, never quiz progress
         val card = _currentCard.value ?: return
         val deckId = _openDeckId.value
         val deck = deckById(deckId)
@@ -319,6 +320,7 @@ class AppViewModel(private val store: ProgressStore) : ViewModel() {
 
     /** Quiz: wrong tap, after the correct answer was revealed. Records and moves on. */
     fun quizWrongAdvance() {
+        if (!quizSession) return
         val card = _currentCard.value ?: return
         val today = LocalDate.now().toEpochDay()
         val generated = isGeneratedSession()
