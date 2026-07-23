@@ -14,6 +14,15 @@ class CurriculumTest {
             .map { it.id.removePrefix("letter_").first() }
             .toSet()
 
+    @Test fun everyDeckHasAnAgeUnlockAndNoStaleIds() {
+        decks.forEach { deck ->
+            assertTrue("deck ${deck.id} missing from ageUnlocks", Curriculum.ageUnlocks.containsKey(deck.id))
+        }
+        Curriculum.ageUnlocks.keys.forEach { id ->
+            assertTrue("ageUnlocks has stale id $id", decks.any { it.id == id })
+        }
+    }
+
     @Test fun allDeckIdsUniqueAndAllItemIdsUnique() {
         assertEquals(decks.size, decks.map { it.id }.toSet().size)
         val itemIds = decks.flatMap { d -> d.items.map { it.id } }

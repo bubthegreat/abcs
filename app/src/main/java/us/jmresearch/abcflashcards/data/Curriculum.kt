@@ -2,6 +2,23 @@ package us.jmresearch.abcflashcards.data
 
 object Curriculum {
 
+    /**
+     * Age at which a deck auto-unlocks regardless of the mastery chain —
+     * things a kid that age should already find reasonable. Decks absent
+     * here only unlock via the chain or a parent override.
+     */
+    val ageUnlocks: Map<String, Int> = mapOf(
+        "letters_1" to 3, "letters_2" to 4, "letters_3" to 4, "letters_4" to 5,
+        "letters_5" to 5, "letters_review" to 5,
+        "cvc_1" to 5, "cvc_2" to 6, "cvc_3" to 6, "sight_1" to 6,
+        "phrases_1" to 6, "phrases_2" to 7,
+        "numbers" to 3, "counting" to 4, "addition" to 6, "subtraction" to 6,
+        "multiplication" to 8, "division" to 8, "fractions" to 8, "algebra" to 9,
+        "colors" to 2, "shapes" to 2, "shapes_2" to 4, "colors_shapes" to 4,
+        "vocab_prek" to 4, "vocab_k" to 5, "vocab_1" to 6, "vocab_2" to 7,
+        "grammar_1" to 6, "grammar_2" to 7, "grammar_3" to 8,
+    )
+
     private fun letterDeck(id: String, title: String, letters: String, rule: UnlockRule) = Deck(
         id = id,
         title = title,

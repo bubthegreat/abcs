@@ -31,6 +31,7 @@ class ProgressStore(private val context: Context) {
     private fun starBankKey(pid: String) = stringPreferencesKey("star_bank_v1_$pid")
     private fun homeworkKey(pid: String) = stringPreferencesKey("homework_v1_$pid")
     private fun homeworkRewardsKey(pid: String) = stringPreferencesKey("homework_rewards_v1_$pid")
+    private fun rewardedKey(pid: String) = stringPreferencesKey("rewarded_v1_$pid")
     private fun starProgressKey(pid: String) = stringPreferencesKey("star_progress_v1_$pid")
     private val pinKey = stringPreferencesKey("parent_pin_v1")
     private val musicVolumeKey = stringPreferencesKey("music_volume_v1")
@@ -145,6 +146,38 @@ class ProgressStore(private val context: Context) {
             val current = (prefs[key] ?: "").split(";").filter { it.isNotBlank() }.toMutableSet()
             if (assigned) current.add(deckId) else current.remove(deckId)
             prefs[key] = current.joinToString(";")
+            if (assigned) {
+                // Re-assigning homework starts a fresh earning cycle.
+                val rk = rewardedKey(pid)
+                val rewarded = (prefs[rk] ?: "").split(";").filter { it.isNotBlank() }.toMutableSet()
+                rewarded.remove(deckId)
+                prefs[rk] = rewarded.joinToString(";")
+            }
+        }
+    }
+
+    /** Homework activities already paid out this assignment cycle. Survives resets. */
+    val rewarded: Flow<Set<String>> = safeData.map { prefs ->
+        (prefs[rewardedKey(activePid(prefs))] ?: "")
+            .split(";").filter { it.isNotBlank() }.toSet()
+    }
+
+    suspend fun markRewarded(activityId: String) {
+        context.dataStore.edit { prefs ->
+            val pid = activePid(prefs)
+            val key = rewardedKey(pid)
+            val current = (prefs[key] ?: "").split(";").filter { it.isNotBlank() }.toMutableSet()
+            current.add(activityId)
+            prefs[key] = current.joinToString(";")
+        }
+    }
+
+    suspend fun setBirthday(profileId: String, epochDay: Long?) {
+        context.dataStore.edit { prefs ->
+            val updated = profilesOf(prefs).map {
+                if (it.id == profileId) it.copy(birthdayEpochDay = epochDay) else it
+            }
+            prefs[profilesKey] = encodeProfiles(updated)
         }
     }
 

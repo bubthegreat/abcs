@@ -1088,6 +1088,45 @@ private fun ParentScreen(vm: AppViewModel, state: AppState, audio: AudioBox, onC
 
     var parentTab by remember { mutableStateOf(0) }
     val activeName = state.profiles.firstOrNull { it.id == state.activeProfileId }?.name ?: ""
+    var birthdayTarget by remember { mutableStateOf<us.jmresearch.abcflashcards.data.Profile?>(null) }
+
+    birthdayTarget?.let { target ->
+        var entry by remember(target.id) {
+            mutableStateOf(
+                target.birthdayEpochDay?.let { java.time.LocalDate.ofEpochDay(it).toString() } ?: "",
+            )
+        }
+        var bad by remember { mutableStateOf(false) }
+        AlertDialog(
+            onDismissRequest = { birthdayTarget = null },
+            title = { Text("${target.name}'s birthday") },
+            text = {
+                Column {
+                    Text("Used to auto-unlock age-appropriate decks.", fontSize = 14.sp)
+                    OutlinedTextField(
+                        value = entry,
+                        onValueChange = { entry = it; bad = false },
+                        label = { Text("YYYY-MM-DD") },
+                    )
+                    if (bad) Text("Use YYYY-MM-DD, like 2019-05-24", color = Color(0xFFD32F2F), fontSize = 13.sp)
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        try {
+                            val day = java.time.LocalDate.parse(entry.trim()).toEpochDay()
+                            vm.setBirthday(target.id, day)
+                            birthdayTarget = null
+                        } catch (e: Exception) {
+                            bad = true
+                        }
+                    },
+                ) { Text("Save") }
+            },
+            dismissButton = { TextButton(onClick = { birthdayTarget = null }) { Text("Cancel") } },
+        )
+    }
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1242,10 +1281,14 @@ private fun ParentScreen(vm: AppViewModel, state: AppState, audio: AudioBox, onC
                                 onCheckedChange = { vm.toggleHomework(status.deck.id) },
                             )
                             if (assigned) {
-                                RewardStepper(
-                                    count = state.rewardFor(status.deck.id),
-                                    onChange = { vm.setHomeworkReward(status.deck.id, it) },
-                                )
+                                if (status.deck.id in state.rewarded) {
+                                    Text("✅ earned", fontSize = 12.sp, color = Color(0xFF43A047))
+                                } else {
+                                    RewardStepper(
+                                        count = state.rewardFor(status.deck.id),
+                                        onChange = { vm.setHomeworkReward(status.deck.id, it) },
+                                    )
+                                }
                             }
                         }
                         Box(modifier = Modifier.width(90.dp), contentAlignment = Alignment.Center) {
@@ -1278,16 +1321,20 @@ private fun ParentScreen(vm: AppViewModel, state: AppState, audio: AudioBox, onC
                                 onCheckedChange = { vm.toggleHomework(WRITING_HOMEWORK_ID) },
                             )
                             if (assigned) {
-                                RewardStepper(
-                                    count = state.rewardFor(WRITING_HOMEWORK_ID),
-                                    onChange = { vm.setHomeworkReward(WRITING_HOMEWORK_ID, it) },
-                                )
+                                if (WRITING_HOMEWORK_ID in state.rewarded) {
+                                    Text("✅ earned", fontSize = 12.sp, color = Color(0xFF43A047))
+                                } else {
+                                    RewardStepper(
+                                        count = state.rewardFor(WRITING_HOMEWORK_ID),
+                                        onChange = { vm.setHomeworkReward(WRITING_HOMEWORK_ID, it) },
+                                    )
+                                }
                             }
                         }
                         Spacer(Modifier.width(90.dp))
                     }
                     Text(
-                        "Stars are earned ONLY in quiz mode on homework activities.",
+                        "Stars pay once per assignment. ✅ earned = paid; flip homework off and on to assign it again.",
                         fontSize = 13.sp,
                         color = Color.Gray,
                     )
@@ -1303,11 +1350,19 @@ private fun ParentScreen(vm: AppViewModel, state: AppState, audio: AudioBox, onC
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
                     ) {
+                        val age = us.jmresearch.abcflashcards.data.ageOf(
+                            profile,
+                            java.time.LocalDate.now().toEpochDay(),
+                        )
                         Text(
-                            if (profile.id == state.activeProfileId) "✅ ${profile.name}" else "👦 ${profile.name}",
+                            (if (profile.id == state.activeProfileId) "✅ ${profile.name}" else "👦 ${profile.name}") +
+                                (age?.let { "  ·  $it yrs" } ?: ""),
                             fontSize = 16.sp,
                             modifier = Modifier.weight(1f),
                         )
+                        TextButton(onClick = { birthdayTarget = profile }) {
+                            Text(if (profile.birthdayEpochDay == null) "🎂 Set birthday" else "🎂")
+                        }
                         TextButton(onClick = { renameTarget = profile }) { Text("Rename") }
                         if (state.profiles.size > 1) {
                             TextButton(onClick = { deleteTarget = profile }) { Text("Remove") }

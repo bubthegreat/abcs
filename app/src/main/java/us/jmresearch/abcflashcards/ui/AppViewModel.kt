@@ -53,6 +53,8 @@ data class AppState(
     val homeworkRewards: Map<String, Int> = emptyMap(),
     val musicVolume: Float = 0.4f,
     val sfxVolume: Float = 0.7f,
+    val rewarded: Set<String> = emptySet(),
+    val activeAge: Int? = null,
 )
 
 fun AppState.rewardFor(activityId: String): Int = homeworkRewards[activityId] ?: 1
@@ -69,7 +71,7 @@ private data class Core(
     val homeworkRewards: Map<String, Int>,
 )
 
-private data class Profs(val profiles: List<Profile>, val activeId: String)
+private data class Profs(val profiles: List<Profile>, val activeId: String, val rewarded: Set<String>)
 
 private data class KidBits(
     val bank: Int,
@@ -93,18 +95,28 @@ class AppViewModel(private val store: ProgressStore) : ViewModel() {
                 store.forceUnlocked,
                 combine(store.homework, store.homeworkRewards) { h, r -> h to r },
             ) { (p, q), t, f, (h, r) -> Core(p, t, f, h, q, r) },
-            combine(store.profiles, store.activeProfileId) { pr, id -> Profs(pr, id) },
+            combine(store.profiles, store.activeProfileId, store.rewarded) { pr, id, rw -> Profs(pr, id, rw) },
             combine(store.starBank, store.starProgress, store.parentPin, store.musicVolume, store.sfxVolume) { b, s, pin, mv, sv ->
                 KidBits(b, s, pin, mv, sv)
             },
         ) { core, profs, kid ->
+            val activeProfile = profs.profiles.firstOrNull { it.id == profs.activeId }
+            val age = activeProfile?.let {
+                us.jmresearch.abcflashcards.data.ageOf(it, LocalDate.now().toEpochDay())
+            }
+            fun ageOpen(deckId: String): Boolean {
+                val minAge = Curriculum.ageUnlocks[deckId] ?: return false
+                return age != null && age >= minAge
+            }
             val statuses = Curriculum.decks.map { deck ->
                 DeckStatus(
                     deck = deck,
-                    unlocked = isDeckUnlocked(deck, Curriculum.decks, core.progress, core.threshold, core.force),
+                    unlocked = ageOpen(deck.id) ||
+                        isDeckUnlocked(deck, Curriculum.decks, core.progress, core.threshold, core.force),
                     masteredCount = deck.items.count { isMastered(core.progress[it.id], core.threshold) },
                     total = deck.items.size,
-                    quizUnlocked = isDeckUnlocked(deck, Curriculum.decks, core.quizProgress, core.threshold, core.force),
+                    quizUnlocked = ageOpen(deck.id) ||
+                        isDeckUnlocked(deck, Curriculum.decks, core.quizProgress, core.threshold, core.force),
                     quizMasteredCount = deck.items.count { isMastered(core.quizProgress[it.id], core.threshold) },
                 )
             }
@@ -120,6 +132,8 @@ class AppViewModel(private val store: ProgressStore) : ViewModel() {
                 parentPin = kid.pin,
                 musicVolume = kid.musicVolume,
                 sfxVolume = kid.sfxVolume,
+                rewarded = profs.rewarded,
+                activeAge = age,
                 homework = core.homework,
                 quizProgress = core.quizProgress,
                 homeworkRewards = core.homeworkRewards,
@@ -227,27 +241,36 @@ class AppViewModel(private val store: ProgressStore) : ViewModel() {
         }
     }
 
-    /** Stars come ONLY from assigned homework. */
-    private fun earnsStars(activityId: String?): Boolean =
-        activityId != null && activityId in state.value.homework
+    /**
+     * Stars come ONLY from assigned homework that hasn't paid out this
+     * assignment cycle. The rewarded ledger survives resets, so
+     * reset-and-regrind earns nothing until a parent re-assigns.
+     */
+    private fun earnsStars(activityId: String?): Boolean {
+        val s = state.value
+        return activityId != null && activityId in s.homework && activityId !in s.rewarded
+    }
 
-    /** Quiz: correct tap. Advances quiz progress; feeds the star bank when the deck is homework. */
+    /** Quiz: correct tap. Advances quiz progress; stars only on unearned homework. */
     fun quizCorrect() {
         val card = _currentCard.value ?: return
         val deckId = _openDeckId.value
         val deck = deckById(deckId)
         val today = LocalDate.now().toEpochDay()
         val s = state.value
-        val earns = earnsStars(deckId)
+        // Drip counts only first-time progress: card not yet quiz-mastered.
+        val cardUnmastered = (s.quizProgress[card.id]?.correctCount ?: 0) < s.threshold
+        val earns = earnsStars(deckId) && !_reviewMode.value
         // Does this correct answer push the whole quiz deck over the line?
         val completesDeck = deck != null && !_reviewMode.value &&
             (s.quizProgress[card.id]?.correctCount ?: 0) + 1 >= s.threshold &&
             deck.items.all { it.id == card.id || isMastered(s.quizProgress[it.id], s.threshold) }
         viewModelScope.launch {
             store.updateQuizItem(card.id) { applyCorrect(it, today) }
-            if (earns) {
-                store.recordKidCorrect(CORRECTS_PER_STAR)
-                if (completesDeck && deckId != null) store.addStars(s.rewardFor(deckId))
+            if (earns && cardUnmastered) store.recordKidCorrect(CORRECTS_PER_STAR)
+            if (earns && completesDeck && deckId != null) {
+                store.addStars(s.rewardFor(deckId))
+                store.markRewarded(deckId)
             }
             advance(lastShownId = card.id)
         }
@@ -334,10 +357,17 @@ class AppViewModel(private val store: ProgressStore) : ViewModel() {
         viewModelScope.launch { store.redeemStars(count) }
     }
 
-    /** Finishing a 5-sentence story earns the writing homework's reward. */
+    /** Finishing a story pays the writing reward once per assignment cycle. */
     fun awardStoryStar() {
         if (!earnsStars(WRITING_HOMEWORK_ID)) return
-        viewModelScope.launch { store.addStars(state.value.rewardFor(WRITING_HOMEWORK_ID)) }
+        viewModelScope.launch {
+            store.addStars(state.value.rewardFor(WRITING_HOMEWORK_ID))
+            store.markRewarded(WRITING_HOMEWORK_ID)
+        }
+    }
+
+    fun setBirthday(profileId: String, epochDay: Long?) {
+        viewModelScope.launch { store.setBirthday(profileId, epochDay) }
     }
 
     fun toggleHomework(activityId: String) {

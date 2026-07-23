@@ -10,6 +10,20 @@ class ProfileCodecTest {
         assertEquals(profiles, decodeProfiles(encodeProfiles(profiles)))
     }
 
+    @Test fun birthdayRoundTripAndLegacyCompat() {
+        val profiles = listOf(Profile("p1", "Max", 18000L), Profile("p2", "Zoe", null))
+        assertEquals(profiles, decodeProfiles(encodeProfiles(profiles)))
+        // pre-birthday entries decode with null birthday
+        assertEquals(listOf(Profile("p1", "Max")), decodeProfiles("p1|Max"))
+    }
+
+    @Test fun ageComputesWholeYears() {
+        val bday = 0L // epoch day zero
+        assertEquals(4, ageOf(Profile("p1", "a", bday), (365.2425 * 4.5).toLong()))
+        assertEquals(null, ageOf(Profile("p1", "a", null), 1000L))
+        assertEquals(null, ageOf(Profile("p1", "a", 2000L), 1000L)) // future birthday
+    }
+
     @Test fun emptyAndBlankDecodeToEmpty() {
         assertEquals(emptyList<Profile>(), decodeProfiles(""))
     }
