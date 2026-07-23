@@ -699,6 +699,23 @@ private fun CelebrationScreen(deckTitle: String, onKeepPracticing: () -> Unit, o
 }
 
 @Composable
+private fun RewardStepper(count: Int, onChange: (Int) -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        TextButton(
+            onClick = { onChange(count - 1) },
+            enabled = count > 1,
+            modifier = Modifier.width(36.dp),
+        ) { Text("−", fontSize = 18.sp) }
+        Text("$count⭐", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+        TextButton(
+            onClick = { onChange(count + 1) },
+            enabled = count < 10,
+            modifier = Modifier.width(36.dp),
+        ) { Text("+", fontSize = 18.sp) }
+    }
+}
+
+@Composable
 private fun LetterRecordings(audio: AudioBox) {
     val context = androidx.compose.ui.platform.LocalContext.current
     var recordingLetter by remember { mutableStateOf<Char?>(null) }
@@ -981,11 +998,17 @@ private fun ParentScreen(vm: AppViewModel, state: AppState, audio: AudioBox, onC
                                 color = Color.Gray,
                             )
                         }
-                        Button(
-                            onClick = { vm.redeemStars(1) },
-                            enabled = state.starBank > 0,
-                            modifier = Modifier.height(56.dp),
-                        ) { Text("🎁 Redeem 1 star", fontSize = 16.sp) }
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Button(
+                                onClick = { vm.redeemStars(1) },
+                                enabled = state.starBank > 0,
+                                modifier = Modifier.height(56.dp),
+                            ) { Text("🎁 Redeem 1 star", fontSize = 16.sp) }
+                            TextButton(
+                                onClick = { vm.resetStarProgress() },
+                                enabled = state.starProgress > 0,
+                            ) { Text("Reset ${state.starProgress}/$CORRECTS_PER_STAR progress") }
+                        }
                     }
                 }
                 Text("Mastery threshold: ${state.threshold}", fontSize = 16.sp, modifier = Modifier.padding(top = 12.dp))
@@ -1024,11 +1047,20 @@ private fun ParentScreen(vm: AppViewModel, state: AppState, audio: AudioBox, onC
                         )
                     }
                     val assigned = status.deck.id in state.homework
-                    Box(modifier = Modifier.width(100.dp), contentAlignment = Alignment.Center) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier.width(100.dp),
+                    ) {
                         Switch(
                             checked = assigned,
                             onCheckedChange = { vm.toggleHomework(status.deck.id) },
                         )
+                        if (assigned) {
+                            RewardStepper(
+                                count = state.rewardFor(status.deck.id),
+                                onChange = { vm.setHomeworkReward(status.deck.id, it) },
+                            )
+                        }
                     }
                     Box(modifier = Modifier.width(80.dp), contentAlignment = Alignment.Center) {
                         TextButton(onClick = { resetTarget = status }) { Text("Reset") }
@@ -1054,11 +1086,20 @@ private fun ParentScreen(vm: AppViewModel, state: AppState, audio: AudioBox, onC
                         Text("5-sentence story = 1 star", fontSize = 13.sp, color = Color.Gray)
                     }
                     val assigned = WRITING_HOMEWORK_ID in state.homework
-                    Box(modifier = Modifier.width(100.dp), contentAlignment = Alignment.Center) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier.width(100.dp),
+                    ) {
                         Switch(
                             checked = assigned,
                             onCheckedChange = { vm.toggleHomework(WRITING_HOMEWORK_ID) },
                         )
+                        if (assigned) {
+                            RewardStepper(
+                                count = state.rewardFor(WRITING_HOMEWORK_ID),
+                                onChange = { vm.setHomeworkReward(WRITING_HOMEWORK_ID, it) },
+                            )
+                        }
                     }
                     Spacer(Modifier.width(170.dp))
                 }

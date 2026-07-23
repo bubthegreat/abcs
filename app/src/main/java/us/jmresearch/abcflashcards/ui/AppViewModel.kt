@@ -50,7 +50,10 @@ data class AppState(
     val parentPin: String? = null,
     val homework: Set<String> = emptySet(),
     val quizProgress: Map<String, ItemProgress> = emptyMap(),
+    val homeworkRewards: Map<String, Int> = emptyMap(),
 )
+
+fun AppState.rewardFor(activityId: String): Int = homeworkRewards[activityId] ?: 1
 
 /** Special homework id for the writing/story activity (not a deck). */
 const val WRITING_HOMEWORK_ID = "writing"
@@ -61,6 +64,7 @@ private data class Core(
     val force: Set<String>,
     val homework: Set<String>,
     val quizProgress: Map<String, ItemProgress>,
+    val homeworkRewards: Map<String, Int>,
 )
 
 private data class Profs(val profiles: List<Profile>, val activeId: String)
@@ -80,7 +84,12 @@ class AppViewModel(private val store: ProgressStore) : ViewModel() {
 
     val state: StateFlow<AppState> =
         combine(
-            combine(store.progress, store.threshold, store.forceUnlocked, store.homework, store.quizProgress) { p, t, f, h, q -> Core(p, t, f, h, q) },
+            combine(
+                combine(store.progress, store.quizProgress) { p, q -> p to q },
+                store.threshold,
+                store.forceUnlocked,
+                combine(store.homework, store.homeworkRewards) { h, r -> h to r },
+            ) { (p, q), t, f, (h, r) -> Core(p, t, f, h, q, r) },
             combine(store.profiles, store.activeProfileId) { pr, id -> Profs(pr, id) },
             combine(store.starBank, store.starProgress, store.kidMode, store.parentPin) { b, s, k, pin ->
                 KidBits(b, s, k, pin)
@@ -108,6 +117,8 @@ class AppViewModel(private val store: ProgressStore) : ViewModel() {
                 kidMode = kid.kidMode,
                 parentPin = kid.pin,
                 homework = core.homework,
+                quizProgress = core.quizProgress,
+                homeworkRewards = core.homeworkRewards,
             )
         }.stateIn(viewModelScope, SharingStarted.Eagerly, AppState())
 
@@ -200,7 +211,7 @@ class AppViewModel(private val store: ProgressStore) : ViewModel() {
             store.updateQuizItem(card.id) { applyCorrect(it, today) }
             if (earns) {
                 store.recordKidCorrect(CORRECTS_PER_STAR)
-                if (completesDeck) store.addStars(1)
+                if (completesDeck && deckId != null) store.addStars(s.rewardFor(deckId))
             }
             advance(lastShownId = card.id)
         }
@@ -260,16 +271,24 @@ class AppViewModel(private val store: ProgressStore) : ViewModel() {
         viewModelScope.launch { store.redeemStars(count) }
     }
 
-    /** Finishing a 5-sentence story in kid mode earns a star (when writing is homework or nothing is assigned). */
+    /** Finishing a 5-sentence story earns the writing homework's reward. */
     fun awardStoryStar() {
         if (!earnsStars(WRITING_HOMEWORK_ID)) return
-        viewModelScope.launch { store.addStars(1) }
+        viewModelScope.launch { store.addStars(state.value.rewardFor(WRITING_HOMEWORK_ID)) }
     }
 
     fun toggleHomework(activityId: String) {
         viewModelScope.launch {
             store.setHomework(activityId, activityId !in state.value.homework)
         }
+    }
+
+    fun setHomeworkReward(activityId: String, count: Int) {
+        viewModelScope.launch { store.setHomeworkReward(activityId, count) }
+    }
+
+    fun resetStarProgress() {
+        viewModelScope.launch { store.resetStarProgress() }
     }
 
     companion object {

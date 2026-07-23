@@ -30,6 +30,7 @@ class ProgressStore(private val context: Context) {
     private fun forceUnlockedKey(pid: String) = stringPreferencesKey("force_unlocked_v1_$pid")
     private fun starBankKey(pid: String) = stringPreferencesKey("star_bank_v1_$pid")
     private fun homeworkKey(pid: String) = stringPreferencesKey("homework_v1_$pid")
+    private fun homeworkRewardsKey(pid: String) = stringPreferencesKey("homework_rewards_v1_$pid")
     private fun starProgressKey(pid: String) = stringPreferencesKey("star_progress_v1_$pid")
     private val pinKey = stringPreferencesKey("parent_pin_v1")
     private val kidModeKey = stringPreferencesKey("kid_mode_v1")
@@ -136,6 +137,36 @@ class ProgressStore(private val context: Context) {
             val current = (prefs[key] ?: "").split(";").filter { it.isNotBlank() }.toMutableSet()
             if (assigned) current.add(deckId) else current.remove(deckId)
             prefs[key] = current.joinToString(";")
+        }
+    }
+
+    /** Stars awarded for completing each homework activity (default 1). */
+    val homeworkRewards: Flow<Map<String, Int>> = safeData.map { prefs ->
+        (prefs[homeworkRewardsKey(activePid(prefs))] ?: "")
+            .split(";").mapNotNull { entry ->
+                val parts = entry.split(":")
+                val count = parts.getOrNull(1)?.toIntOrNull() ?: return@mapNotNull null
+                if (parts[0].isBlank()) null else parts[0] to count
+            }.toMap()
+    }
+
+    suspend fun setHomeworkReward(activityId: String, count: Int) {
+        context.dataStore.edit { prefs ->
+            val pid = activePid(prefs)
+            val key = homeworkRewardsKey(pid)
+            val map = (prefs[key] ?: "").split(";").mapNotNull { entry ->
+                val parts = entry.split(":")
+                val c = parts.getOrNull(1)?.toIntOrNull() ?: return@mapNotNull null
+                if (parts[0].isBlank()) null else parts[0] to c
+            }.toMap().toMutableMap()
+            map[activityId] = count.coerceIn(1, 10)
+            prefs[key] = map.entries.joinToString(";") { "${it.key}:${it.value}" }
+        }
+    }
+
+    suspend fun resetStarProgress() {
+        context.dataStore.edit { prefs ->
+            prefs[starProgressKey(activePid(prefs))] = "0"
         }
     }
 
