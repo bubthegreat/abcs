@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -340,10 +341,19 @@ private fun QuizScreen(vm: AppViewModel, state: AppState, audio: AudioBox, sound
 
     val q = quiz
     val quizNonce by vm.quizNonce.collectAsState()
+    // Confetti burst positions (fractions of screen), refreshed per correct answer.
+    var confetti by remember { mutableStateOf<List<Triple<Float, Float, String>>>(emptyList()) }
 
     // Runs at screen level so it survives the answer buttons leaving composition.
     androidx.compose.runtime.LaunchedEffect(flashCorrect) {
         if (flashCorrect) {
+            confetti = List(6) {
+                Triple(
+                    kotlin.random.Random.nextFloat() * 0.85f,
+                    kotlin.random.Random.nextFloat() * 0.75f,
+                    listOf("🎉", "⭐", "🎊", "✨").random(),
+                )
+            }
             kotlinx.coroutines.delay(900)
             vm.quizCorrect()
         }
@@ -368,6 +378,9 @@ private fun QuizScreen(vm: AppViewModel, state: AppState, audio: AudioBox, sound
         }
     }
 
+    androidx.compose.foundation.layout.BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        val maxW = maxWidth
+        val maxH = maxHeight
     Column(
         modifier = Modifier.fillMaxSize().padding(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -396,7 +409,6 @@ private fun QuizScreen(vm: AppViewModel, state: AppState, audio: AudioBox, sound
         ) {
             when {
                 q == null -> Text("All Done! 🎉", fontSize = 40.sp, fontWeight = FontWeight.Bold)
-                flashCorrect -> Text("🎉", fontSize = 96.sp)
                 q.visualPrompt != null -> Text(
                     q.visualPrompt!!,
                     fontSize = if (q.visualPrompt!!.length > 8) 44.sp else 80.sp,
@@ -416,7 +428,7 @@ private fun QuizScreen(vm: AppViewModel, state: AppState, audio: AudioBox, sound
                 ) { Text("🔊", fontSize = 48.sp) }
             }
         }
-        if (q != null && !flashCorrect) {
+        if (q != null) {
             Row(
                 modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -431,7 +443,7 @@ private fun QuizScreen(vm: AppViewModel, state: AppState, audio: AudioBox, sound
                     }
                     Button(
                         onClick = {
-                            if (wrongPicked != null) return@Button
+                            if (wrongPicked != null || flashCorrect) return@Button
                             if (isAnswer) {
                                 flashCorrect = true
                                 sound.correct()
@@ -476,6 +488,18 @@ private fun QuizScreen(vm: AppViewModel, state: AppState, audio: AudioBox, sound
                 }
             }
         }
+    }
+
+    // Confetti pops over everything without hiding the screen.
+    if (flashCorrect) {
+        confetti.forEach { (fx, fy, emoji) ->
+            Text(
+                emoji,
+                fontSize = 56.sp,
+                modifier = Modifier.offset(x = maxW * fx, y = maxH * fy),
+            )
+        }
+    }
     }
 }
 
@@ -1055,197 +1079,257 @@ private fun ParentScreen(vm: AppViewModel, state: AppState, audio: AudioBox, onC
         )
     }
 
+
+    var parentTab by remember { mutableStateOf(0) }
+    val activeName = state.profiles.firstOrNull { it.id == state.activeProfileId }?.name ?: ""
+
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             TextButton(onClick = onClose) { Text("← Back", fontSize = 18.sp) }
             Spacer(Modifier.weight(1f))
             Text("Parent Settings", fontSize = 20.sp, fontWeight = FontWeight.Bold)
         }
-        LazyColumn(modifier = Modifier.weight(1f)) {
-            item {
-                Text("Kids", fontSize = 16.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 8.dp))
-                Text(
-                    "Tap a kid to switch — everything below is for the ✅ kid.",
-                    fontSize = 13.sp,
-                    color = Color.Gray,
+
+        // Kid selector chips — everything below applies to the selected kid.
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+        ) {
+            state.profiles.forEach { profile ->
+                val selected = profile.id == state.activeProfileId
+                AssistChip(
+                    onClick = { vm.switchProfile(profile.id) },
+                    label = {
+                        Text(
+                            if (selected) "✅ ${profile.name}" else profile.name,
+                            fontSize = 16.sp,
+                            fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+                        )
+                    },
                 )
             }
-            items(state.profiles, key = { "kid_${it.id}" }) { profile ->
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { vm.switchProfile(profile.id) }
-                        .padding(vertical = 4.dp),
-                ) {
+        }
+
+        androidx.compose.material3.TabRow(selectedTabIndex = parentTab) {
+            listOf("⭐ Summary", "📚 Learning", "🔧 Setup").forEachIndexed { i, title ->
+                androidx.compose.material3.Tab(
+                    selected = parentTab == i,
+                    onClick = { parentTab = i },
+                    text = { Text(title, fontSize = 15.sp) },
+                )
+            }
+        }
+
+        when (parentTab) {
+            0 -> LazyColumn(modifier = Modifier.weight(1f)) {
+                item {
+                    Card(
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth().padding(16.dp),
+                        ) {
+                            Column(Modifier.weight(1f)) {
+                                Text("⭐ ${state.starBank} stars", fontSize = 28.sp, fontWeight = FontWeight.Bold)
+                                Text(
+                                    "${state.starProgress}/$CORRECTS_PER_STAR toward the next star",
+                                    fontSize = 14.sp,
+                                    color = Color.Gray,
+                                )
+                            }
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Button(
+                                    onClick = { vm.redeemStars(1) },
+                                    enabled = state.starBank > 0,
+                                    modifier = Modifier.height(56.dp),
+                                ) { Text("🎁 Redeem 1 star", fontSize = 16.sp) }
+                                TextButton(
+                                    onClick = { vm.resetStarProgress() },
+                                    enabled = state.starProgress > 0,
+                                ) { Text("Reset ${state.starProgress}/$CORRECTS_PER_STAR progress") }
+                            }
+                        }
+                    }
                     Text(
-                        if (profile.id == state.activeProfileId) "✅ ${profile.name}" else "👦 ${profile.name}",
+                        "$activeName" + "'s progress",
                         fontSize = 16.sp,
-                        fontWeight = if (profile.id == state.activeProfileId) FontWeight.Bold else FontWeight.Normal,
-                        modifier = Modifier.weight(1f),
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.padding(top = 16.dp, bottom = 4.dp),
                     )
-                    TextButton(onClick = { renameTarget = profile }) { Text("Rename") }
-                    if (state.profiles.size > 1) {
-                        TextButton(onClick = { deleteTarget = profile }) { Text("Remove") }
+                }
+                items(Subject.entries.toList(), key = { "sum_" + it.name }) { subject ->
+                    val decks = state.deckStatuses.filter { it.deck.subject == subject }
+                    if (decks.isNotEmpty()) {
+                        val learn = decks.sumOf { it.masteredCount }
+                        val quizzed = decks.sumOf { it.quizMasteredCount }
+                        val total = decks.sumOf { it.total }
+                        Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+                            Text(
+                                tabs.firstOrNull { it.subject == subject }?.let { "${it.emoji} ${it.title}" } ?: subject.name,
+                                fontSize = 15.sp,
+                                modifier = Modifier.weight(1f),
+                            )
+                            Text("🃏 $learn/$total   🎯 $quizzed/$total", fontSize = 15.sp, color = Color.Gray)
+                        }
                     }
                 }
-            }
-            item {
-                var newKidName by remember { mutableStateOf("") }
-                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-                    OutlinedTextField(
-                        value = newKidName,
-                        onValueChange = { newKidName = it },
-                        label = { Text("New kid's name") },
-                        modifier = Modifier.weight(1f),
-                    )
-                    TextButton(
-                        onClick = {
-                            if (newKidName.isNotBlank()) {
-                                vm.addProfile(newKidName)
-                                newKidName = ""
-                            }
+                item {
+                    val hw = state.homework
+                    Text(
+                        if (hw.isEmpty()) "No homework assigned — no stars can be earned."
+                        else "Homework: " + hw.joinToString(", ") { id ->
+                            if (id == WRITING_HOMEWORK_ID) "Writing" else state.deckStatuses.firstOrNull { it.deck.id == id }?.deck?.title ?: id
                         },
-                    ) { Text("Add") }
+                        fontSize = 14.sp,
+                        color = if (hw.isEmpty()) Color(0xFFD32F2F) else Color.Gray,
+                        modifier = Modifier.padding(top = 8.dp),
+                    )
                 }
             }
-            item {
-                val activeName = state.profiles.firstOrNull { it.id == state.activeProfileId }?.name ?: ""
-                Text(
-                    "Settings for: $activeName",
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.padding(top = 8.dp),
-                )
-                Card(
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
-                ) {
+
+            1 -> LazyColumn(modifier = Modifier.weight(1f)) {
+                item {
+                    Text("Mastery threshold: ${state.threshold}", fontSize = 16.sp, modifier = Modifier.padding(top = 12.dp))
+                    Slider(
+                        value = state.threshold.toFloat(),
+                        onValueChange = { vm.setThreshold(it.toInt()) },
+                        valueRange = 1f..10f,
+                        steps = 8,
+                    )
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.fillMaxWidth().padding(16.dp),
+                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                    ) {
+                        Text("Decks", fontSize = 16.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                        TextButton(onClick = { showResetAll = true }) { Text("Reset all") }
+                    }
+                    Row(modifier = Modifier.fillMaxWidth()) {
+                        Spacer(Modifier.weight(1f))
+                        Text("Homework", fontSize = 13.sp, color = Color.Gray, textAlign = TextAlign.Center, modifier = Modifier.width(100.dp))
+                        Text("Lock", fontSize = 13.sp, color = Color.Gray, textAlign = TextAlign.Center, modifier = Modifier.width(90.dp))
+                    }
+                }
+                items(state.deckStatuses, key = { it.deck.id }) { status ->
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
                     ) {
                         Column(Modifier.weight(1f)) {
+                            Text(status.deck.title, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
                             Text(
-                                "⭐ ${state.starBank} stars",
-                                fontSize = 28.sp,
-                                fontWeight = FontWeight.Bold,
-                            )
-                            Text(
-                                "${state.starProgress}/$CORRECTS_PER_STAR toward the next star",
-                                fontSize = 14.sp,
+                                "🃏 ${status.masteredCount}/${status.total}  🎯 ${status.quizMasteredCount}/${status.total}" +
+                                    if (!status.unlocked) " · locked" else "",
+                                fontSize = 13.sp,
                                 color = Color.Gray,
                             )
                         }
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Button(
-                                onClick = { vm.redeemStars(1) },
-                                enabled = state.starBank > 0,
-                                modifier = Modifier.height(56.dp),
-                            ) { Text("🎁 Redeem 1 star", fontSize = 16.sp) }
-                            TextButton(
-                                onClick = { vm.resetStarProgress() },
-                                enabled = state.starProgress > 0,
-                            ) { Text("Reset ${state.starProgress}/$CORRECTS_PER_STAR progress") }
+                        val assigned = status.deck.id in state.homework
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            modifier = Modifier.width(100.dp),
+                        ) {
+                            Switch(
+                                checked = assigned,
+                                onCheckedChange = { vm.toggleHomework(status.deck.id) },
+                            )
+                            if (assigned) {
+                                RewardStepper(
+                                    count = state.rewardFor(status.deck.id),
+                                    onChange = { vm.setHomeworkReward(status.deck.id, it) },
+                                )
+                            }
+                        }
+                        Box(modifier = Modifier.width(90.dp), contentAlignment = Alignment.Center) {
+                            when {
+                                status.deck.id in state.forceUnlocked ->
+                                    TextButton(onClick = { vm.toggleForceUnlock(status.deck.id) }) { Text("Re-lock") }
+                                !status.unlocked ->
+                                    TextButton(onClick = { vm.toggleForceUnlock(status.deck.id) }) { Text("Unlock") }
+                                else -> Text("—", color = Color.LightGray)
+                            }
                         }
                     }
                 }
-                Text("Mastery threshold: ${state.threshold}", fontSize = 16.sp, modifier = Modifier.padding(top = 12.dp))
-                Slider(
-                    value = state.threshold.toFloat(),
-                    onValueChange = { vm.setThreshold(it.toInt()) },
-                    valueRange = 1f..10f,
-                    steps = 8,
-                )
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-                ) {
-                    Text("Decks", fontSize = 16.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-                    TextButton(onClick = { showResetAll = true }) { Text("Reset all") }
-                }
-                Row(modifier = Modifier.fillMaxWidth()) {
-                    Spacer(Modifier.weight(1f))
-                    Text("Homework", fontSize = 13.sp, color = Color.Gray, textAlign = TextAlign.Center, modifier = Modifier.width(100.dp))
-                    Text("Lock", fontSize = 13.sp, color = Color.Gray, textAlign = TextAlign.Center, modifier = Modifier.width(90.dp))
+                item {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text("✍️ Writing stories", fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                            Text("5-sentence story = reward", fontSize = 13.sp, color = Color.Gray)
+                        }
+                        val assigned = WRITING_HOMEWORK_ID in state.homework
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            modifier = Modifier.width(100.dp),
+                        ) {
+                            Switch(
+                                checked = assigned,
+                                onCheckedChange = { vm.toggleHomework(WRITING_HOMEWORK_ID) },
+                            )
+                            if (assigned) {
+                                RewardStepper(
+                                    count = state.rewardFor(WRITING_HOMEWORK_ID),
+                                    onChange = { vm.setHomeworkReward(WRITING_HOMEWORK_ID, it) },
+                                )
+                            }
+                        }
+                        Spacer(Modifier.width(90.dp))
+                    }
+                    Text(
+                        "Stars are earned ONLY in quiz mode on homework activities.",
+                        fontSize = 13.sp,
+                        color = Color.Gray,
+                    )
                 }
             }
-            items(state.deckStatuses, key = { it.deck.id }) { status ->
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
-                ) {
-                    Column(Modifier.weight(1f)) {
-                        Text(status.deck.title, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+
+            else -> LazyColumn(modifier = Modifier.weight(1f)) {
+                item {
+                    Text("Kids", fontSize = 16.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 12.dp))
+                }
+                items(state.profiles, key = { "kid_" + it.id }) { profile ->
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                    ) {
                         Text(
-                            "${status.masteredCount}/${status.total} mastered" +
-                                if (!status.unlocked) " · locked" else "",
-                            fontSize = 13.sp,
-                            color = Color.Gray,
+                            if (profile.id == state.activeProfileId) "✅ ${profile.name}" else "👦 ${profile.name}",
+                            fontSize = 16.sp,
+                            modifier = Modifier.weight(1f),
                         )
-                    }
-                    val assigned = status.deck.id in state.homework
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        modifier = Modifier.width(100.dp),
-                    ) {
-                        Switch(
-                            checked = assigned,
-                            onCheckedChange = { vm.toggleHomework(status.deck.id) },
-                        )
-                        if (assigned) {
-                            RewardStepper(
-                                count = state.rewardFor(status.deck.id),
-                                onChange = { vm.setHomeworkReward(status.deck.id, it) },
-                            )
-                        }
-                    }
-                    Box(modifier = Modifier.width(90.dp), contentAlignment = Alignment.Center) {
-                        when {
-                            status.deck.id in state.forceUnlocked ->
-                                TextButton(onClick = { vm.toggleForceUnlock(status.deck.id) }) { Text("Re-lock") }
-                            !status.unlocked ->
-                                TextButton(onClick = { vm.toggleForceUnlock(status.deck.id) }) { Text("Unlock") }
-                            else -> Text("—", color = Color.LightGray)
+                        TextButton(onClick = { renameTarget = profile }) { Text("Rename") }
+                        if (state.profiles.size > 1) {
+                            TextButton(onClick = { deleteTarget = profile }) { Text("Remove") }
                         }
                     }
                 }
-            }
-            item {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
-                ) {
-                    Column(Modifier.weight(1f)) {
-                        Text("✍️ Writing stories", fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
-                        Text("5-sentence story = 1 star", fontSize = 13.sp, color = Color.Gray)
-                    }
-                    val assigned = WRITING_HOMEWORK_ID in state.homework
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        modifier = Modifier.width(100.dp),
-                    ) {
-                        Switch(
-                            checked = assigned,
-                            onCheckedChange = { vm.toggleHomework(WRITING_HOMEWORK_ID) },
+                item {
+                    var newKidName by remember { mutableStateOf("") }
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                        OutlinedTextField(
+                            value = newKidName,
+                            onValueChange = { newKidName = it },
+                            label = { Text("New kid's name") },
+                            modifier = Modifier.weight(1f),
                         )
-                        if (assigned) {
-                            RewardStepper(
-                                count = state.rewardFor(WRITING_HOMEWORK_ID),
-                                onChange = { vm.setHomeworkReward(WRITING_HOMEWORK_ID, it) },
-                            )
-                        }
+                        TextButton(
+                            onClick = {
+                                if (newKidName.isNotBlank()) {
+                                    vm.addProfile(newKidName)
+                                    newKidName = ""
+                                }
+                            },
+                        ) { Text("Add") }
                     }
-                    Spacer(Modifier.width(170.dp))
                 }
-                Text(
-                    "Stars are earned ONLY in quiz mode on homework activities.",
-                    fontSize = 13.sp,
-                    color = Color.Gray,
-                )
-            }
-            item {
-                LetterRecordings(audio)
+                item {
+                    LetterRecordings(audio)
+                }
             }
         }
     }
