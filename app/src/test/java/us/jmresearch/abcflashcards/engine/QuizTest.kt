@@ -26,13 +26,13 @@ class QuizTest {
     }
 
     @Test fun mathQuizUsesBacksAndShowsFront() {
-        val d = deck("addition")
-        val target = d.items.first { it.id == "add_3_2" }
+        val d = deck("fractions")
+        val target = d.items.first { it.id == "frac_1_2_8" }
         repeat(20) { seed ->
             val q = buildQuiz(target, d, Random(seed))
-            assertEquals("3 + 2", q.visualPrompt)
-            assertEquals("5", q.answer)
-            assertTrue(q.choices.contains("5"))
+            assertEquals("1/2 of 8", q.visualPrompt)
+            assertEquals("4", q.answer)
+            assertTrue(q.choices.contains("4"))
             assertEquals(3, q.choices.size)
             assertEquals(q.choices.size, q.choices.toSet().size)
         }

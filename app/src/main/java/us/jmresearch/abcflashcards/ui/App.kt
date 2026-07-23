@@ -121,6 +121,13 @@ private fun rememberRainbowAngle(): Float {
     return angle
 }
 
+private data class Firework(
+    val x0: Float,      // launch x as fraction of width
+    val drift: Float,   // horizontal drift over the flight
+    val height: Float,  // apex as fraction of height
+    val emoji: String,
+)
+
 private data class TabSpec(val subject: Subject?, val title: String, val emoji: String)
 
 private val tabs = listOf(
@@ -346,17 +353,26 @@ private fun QuizScreen(vm: AppViewModel, state: AppState, audio: AudioBox, sound
 
     val q = quiz
     val quizNonce by vm.quizNonce.collectAsState()
-    // Confetti burst positions (fractions of screen), refreshed per correct answer.
-    var confetti by remember { mutableStateOf<List<Triple<Float, Float, String>>>(emptyList()) }
+    // Firework emojis: launch from the bottom, arc up, fall off screen.
+    var confetti by remember { mutableStateOf<List<Firework>>(emptyList()) }
+    val burst = remember { androidx.compose.animation.core.Animatable(2f) }
 
     // Runs at screen level so it survives the answer buttons leaving composition.
     androidx.compose.runtime.LaunchedEffect(flashCorrect) {
         if (flashCorrect) {
-            confetti = List(6) {
-                Triple(
-                    kotlin.random.Random.nextFloat() * 0.85f,
-                    kotlin.random.Random.nextFloat() * 0.75f,
-                    listOf("🎉", "⭐", "🎊", "✨").random(),
+            confetti = List(8) {
+                Firework(
+                    x0 = 0.05f + kotlin.random.Random.nextFloat() * 0.8f,
+                    drift = (kotlin.random.Random.nextFloat() - 0.5f) * 0.4f,
+                    height = 0.45f + kotlin.random.Random.nextFloat() * 0.45f,
+                    emoji = listOf("🎉", "⭐", "🎊", "✨").random(),
+                )
+            }
+            launch {
+                burst.snapTo(0f)
+                burst.animateTo(
+                    1.4f,
+                    androidx.compose.animation.core.tween(1600, easing = androidx.compose.animation.core.LinearEasing),
                 )
             }
             kotlinx.coroutines.delay(900)
@@ -495,13 +511,15 @@ private fun QuizScreen(vm: AppViewModel, state: AppState, audio: AudioBox, sound
         }
     }
 
-    // Confetti pops over everything without hiding the screen.
-    if (flashCorrect) {
-        confetti.forEach { (fx, fy, emoji) ->
+    // Firework emojis fly over everything without hiding the screen.
+    if (burst.value < 1.4f) {
+        val p = burst.value
+        confetti.forEach { f ->
+            val yFrac = 1f - f.height * (1f - (2 * p - 1f) * (2 * p - 1f))
             Text(
-                emoji,
-                fontSize = 56.sp,
-                modifier = Modifier.offset(x = maxW * fx, y = maxH * fy),
+                f.emoji,
+                fontSize = 48.sp,
+                modifier = Modifier.offset(x = maxW * (f.x0 + f.drift * p), y = maxH * yFrac),
             )
         }
     }

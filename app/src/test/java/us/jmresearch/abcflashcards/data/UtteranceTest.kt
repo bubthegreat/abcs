@@ -19,10 +19,11 @@ class UtteranceTest {
     }
 
     @Test fun mathSpeaksReadableOperators() {
-        assertEquals("3 plus 2", utteranceFor(item("addition", "add_3_2"), deck("addition")))
-        assertEquals("5 minus 2", utteranceFor(item("subtraction", "sub_5_2"), deck("subtraction")))
-        assertEquals("2 times 3", utteranceFor(item("multiplication", "mul_2_3"), deck("multiplication")))
-        assertEquals("6 divided by 2", utteranceFor(item("division", "div_6_2"), deck("division")))
+        val d = deck("addition")
+        assertEquals("3 plus 2", utteranceFor(CardItem("x", "3 + 2", "5"), d))
+        assertEquals("5 minus 2", utteranceFor(CardItem("x", "5 − 2", "3"), d))
+        assertEquals("2 times 3", utteranceFor(CardItem("x", "2 × 3", "6"), d))
+        assertEquals("6 divided by 2", utteranceFor(CardItem("x", "6 ÷ 2", "3"), d))
     }
 
     @Test fun countingPromptsToCount() {

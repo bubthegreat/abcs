@@ -34,7 +34,7 @@ class CurriculumTest {
             "letters_1", "letters_2", "letters_3", "letters_4", "letters_5", "letters_review",
             "cvc_1", "cvc_2", "cvc_3", "sight_1", "phrases_1", "phrases_2",
             "numbers", "counting", "addition", "subtraction", "multiplication", "division",
-            "fractions", "algebra",
+            "times_tables", "fractions", "algebra",
             "colors", "shapes", "shapes_2", "colors_shapes",
         )
         expected.forEach { id -> assertTrue("missing deck $id", decks.any { it.id == id }) }
@@ -75,26 +75,19 @@ class CurriculumTest {
         }
     }
 
+    @Test fun arithmeticDecksAreGeneratedWithStreakIds() {
+        listOf("addition", "subtraction", "multiplication", "division", "times_tables").forEach { id ->
+            val d = deck(id)
+            assertTrue("$id must be generated", d.generator != null)
+            assertEquals(1, d.items.size)
+            assertEquals(generatedItemId(id), d.items.first().id)
+        }
+        // static math decks stay static
+        assertTrue(deck("fractions").generator == null)
+        assertTrue(deck("algebra").generator == null)
+    }
+
     @Test fun mathFactsAreCorrectAndInRange() {
-        deck("addition").items.forEach {
-            val (a, b) = it.id.removePrefix("add_").split("_").map(String::toInt)
-            assertTrue(a + b <= 10)
-            assertEquals((a + b).toString(), it.back)
-        }
-        deck("subtraction").items.forEach {
-            val (a, b) = it.id.removePrefix("sub_").split("_").map(String::toInt)
-            assertTrue(a <= 10 && a - b >= 0)
-            assertEquals((a - b).toString(), it.back)
-        }
-        deck("multiplication").items.forEach {
-            val (a, b) = it.id.removePrefix("mul_").split("_").map(String::toInt)
-            assertEquals((a * b).toString(), it.back)
-        }
-        deck("division").items.forEach {
-            val (a, b) = it.id.removePrefix("div_").split("_").map(String::toInt)
-            assertEquals(0, a % b)
-            assertEquals((a / b).toString(), it.back)
-        }
         deck("fractions").items.forEach {
             val (n, d, w) = it.id.removePrefix("frac_").split("_").map(String::toInt)
             assertEquals(0, (w * n) % d)

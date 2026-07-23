@@ -126,15 +126,27 @@ class AppViewModel(private val store: ProgressStore) : ViewModel() {
                 return age != null && age >= minAge
             }
             val statuses = Curriculum.decks.map { deck ->
+                val generated = deck.generator != null
+                val genTarget = us.jmresearch.abcflashcards.data.GENERATED_STREAK_TARGET
+                fun learnCount() = if (generated) {
+                    (core.progress[deck.items.first().id]?.correctCount ?: 0).coerceAtMost(genTarget)
+                } else {
+                    deck.items.count { isMastered(core.progress[it.id], core.threshold) }
+                }
+                fun quizCount() = if (generated) {
+                    (core.quizProgress[deck.items.first().id]?.correctCount ?: 0).coerceAtMost(genTarget)
+                } else {
+                    deck.items.count { isMastered(core.quizProgress[it.id], core.threshold) }
+                }
                 DeckStatus(
                     deck = deck,
                     unlocked = ageOpen(deck.id) ||
                         isDeckUnlocked(deck, Curriculum.decks, core.progress, core.threshold, core.force),
-                    masteredCount = deck.items.count { isMastered(core.progress[it.id], core.threshold) },
-                    total = deck.items.size,
+                    masteredCount = learnCount(),
+                    total = if (generated) genTarget else deck.items.size,
                     quizUnlocked = ageOpen(deck.id) ||
                         isDeckUnlocked(deck, Curriculum.decks, core.quizProgress, core.threshold, core.force),
-                    quizMasteredCount = deck.items.count { isMastered(core.quizProgress[it.id], core.threshold) },
+                    quizMasteredCount = quizCount(),
                 )
             }
             AppState(
@@ -228,6 +240,13 @@ class AppViewModel(private val store: ProgressStore) : ViewModel() {
     private fun advance(lastShownId: String?) {
         val deck = deckById(_openDeckId.value) ?: return
         val s = state.value
+        if (deck.generator != null) {
+            val card = us.jmresearch.abcflashcards.engine.genMathCard(deck.generator!!, deck.id, random)
+            _currentCard.value = card
+            _currentQuiz.value = us.jmresearch.abcflashcards.engine.buildGeneratedQuiz(card, random)
+            _quizNonce.value++
+            return
+        }
         val progress = if (quizSession) s.quizProgress else s.progress
         val next = if (_reviewMode.value) {
             // Review of a mastered deck: uniform random over the whole deck, so it
@@ -244,11 +263,20 @@ class AppViewModel(private val store: ProgressStore) : ViewModel() {
     fun markCorrect() = mark(::applyCorrect)
     fun markWrong() = mark(::applyWrong)
 
+    private fun isGeneratedSession(): Boolean = deckById(_openDeckId.value)?.generator != null
+
     private fun mark(transform: (ItemProgress, Long) -> ItemProgress) {
         val card = _currentCard.value ?: return
         val today = LocalDate.now().toEpochDay()
+        // Wrong on a generated deck breaks the streak entirely.
+        val effective: (ItemProgress, Long) -> ItemProgress =
+            if (isGeneratedSession() && transform == ::applyWrong) {
+                { p, d -> p.copy(correctCount = 0, lastSeenEpochDay = d) }
+            } else {
+                transform
+            }
         viewModelScope.launch {
-            store.updateItem(card.id) { transform(it, today) }
+            store.updateItem(card.id) { effective(it, today) }
             advance(lastShownId = card.id)
         }
     }
@@ -268,13 +296,16 @@ class AppViewModel(private val store: ProgressStore) : ViewModel() {
         val deck = deckById(deckId)
         val today = LocalDate.now().toEpochDay()
         val s = state.value
+        val itemThreshold = deck?.let {
+            us.jmresearch.abcflashcards.engine.deckItemThreshold(it, s.threshold)
+        } ?: s.threshold
         // Drip counts only first-time progress: card not yet quiz-mastered.
-        val cardUnmastered = (s.quizProgress[card.id]?.correctCount ?: 0) < s.threshold
+        val cardUnmastered = (s.quizProgress[card.id]?.correctCount ?: 0) < itemThreshold
         val earns = earnsStars(deckId) && !_reviewMode.value
         // Does this correct answer push the whole quiz deck over the line?
         val completesDeck = deck != null && !_reviewMode.value &&
-            (s.quizProgress[card.id]?.correctCount ?: 0) + 1 >= s.threshold &&
-            deck.items.all { it.id == card.id || isMastered(s.quizProgress[it.id], s.threshold) }
+            (s.quizProgress[card.id]?.correctCount ?: 0) + 1 >= itemThreshold &&
+            deck.items.all { it.id == card.id || isMastered(s.quizProgress[it.id], itemThreshold) }
         viewModelScope.launch {
             store.updateQuizItem(card.id) { applyCorrect(it, today) }
             if (earns && cardUnmastered) store.recordKidCorrect(CORRECTS_PER_STAR)
@@ -290,8 +321,11 @@ class AppViewModel(private val store: ProgressStore) : ViewModel() {
     fun quizWrongAdvance() {
         val card = _currentCard.value ?: return
         val today = LocalDate.now().toEpochDay()
+        val generated = isGeneratedSession()
         viewModelScope.launch {
-            store.updateQuizItem(card.id) { applyWrong(it, today) }
+            store.updateQuizItem(card.id) {
+                if (generated) it.copy(correctCount = 0, lastSeenEpochDay = today) else applyWrong(it, today)
+            }
             advance(lastShownId = card.id)
         }
     }

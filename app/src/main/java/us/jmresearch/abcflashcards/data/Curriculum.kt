@@ -13,7 +13,8 @@ object Curriculum {
         "cvc_1" to 5, "cvc_2" to 6, "cvc_3" to 6, "sight_1" to 6,
         "phrases_1" to 6, "phrases_2" to 7,
         "numbers" to 3, "counting" to 4, "addition" to 6, "subtraction" to 6,
-        "multiplication" to 8, "division" to 8, "fractions" to 8, "algebra" to 9,
+        "multiplication" to 8, "division" to 8, "times_tables" to 8,
+        "fractions" to 8, "algebra" to 9,
         "colors" to 2, "shapes" to 2, "shapes_2" to 4, "colors_shapes" to 4,
         "vocab_prek" to 4, "vocab_k" to 5, "vocab_1" to 6, "vocab_2" to 7,
         "grammar_1" to 6, "grammar_2" to 7, "grammar_3" to 8,
@@ -258,34 +259,17 @@ object Curriculum {
             items = (1..10).map { n -> CardItem("count_$n", dots(n), back = "$n") },
             unlockRule = UnlockRule.DecksMastered(listOf("numbers")),
         ))
-        add(Deck(
-            id = "addition", title = "Adding", subject = Subject.MATH,
-            items = buildList {
-                for (a in 1..9) for (b in 1..9) if (a + b <= 10) add(CardItem("add_${a}_$b", "$a + $b", "${a + b}"))
-            },
-            unlockRule = UnlockRule.DecksMastered(listOf("counting")),
-        ))
-        add(Deck(
-            id = "subtraction", title = "Taking Away", subject = Subject.MATH,
-            items = buildList {
-                for (a in 2..10) for (b in 1 until a) add(CardItem("sub_${a}_$b", "$a − $b", "${a - b}"))
-            },
-            unlockRule = UnlockRule.DecksMastered(listOf("counting")),
-        ))
-        add(Deck(
-            id = "multiplication", title = "Times", subject = Subject.MATH,
-            items = buildList {
-                for (a in 1..5) for (b in 1..5) add(CardItem("mul_${a}_$b", "$a × $b", "${a * b}"))
-            },
-            unlockRule = UnlockRule.DecksMastered(listOf("addition", "subtraction")),
-        ))
-        add(Deck(
-            id = "division", title = "Division", subject = Subject.MATH,
-            items = buildList {
-                for (b in 1..5) for (q in 1..5) add(CardItem("div_${b * q}_$b", "${b * q} ÷ $b", "$q"))
-            }.distinctBy { it.id },
-            unlockRule = UnlockRule.DecksMastered(listOf("multiplication")),
-        ))
+        fun generatedDeck(id: String, title: String, op: MathOp, rule: UnlockRule) = Deck(
+            id = id, title = title, subject = Subject.MATH,
+            items = listOf(CardItem(generatedItemId(id), "?")),
+            unlockRule = rule,
+            generator = op,
+        )
+        add(generatedDeck("addition", "Adding", MathOp.ADD, UnlockRule.DecksMastered(listOf("counting"))))
+        add(generatedDeck("subtraction", "Taking Away", MathOp.SUB, UnlockRule.DecksMastered(listOf("counting"))))
+        add(generatedDeck("multiplication", "Times", MathOp.MUL, UnlockRule.DecksMastered(listOf("addition", "subtraction"))))
+        add(generatedDeck("division", "Division", MathOp.DIV, UnlockRule.DecksMastered(listOf("multiplication"))))
+        add(generatedDeck("times_tables", "Times Tables 20", MathOp.TABLES, UnlockRule.DecksMastered(listOf("multiplication"))))
         add(Deck(
             id = "fractions", title = "Fractions", subject = Subject.MATH,
             items = buildList {
