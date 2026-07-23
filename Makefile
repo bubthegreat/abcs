@@ -4,7 +4,9 @@
 # builds are fast.
 
 ANDROID_IMAGE := ghcr.io/cirruslabs/android-sdk:34
-DOCKER_RUN := docker run --rm \
+# MSYS_NO_PATHCONV stops Git Bash on Windows from rewriting /work into a
+# C:/... path; it's ignored everywhere else.
+DOCKER_RUN := MSYS_NO_PATHCONV=1 docker run --rm \
 	-v "$(CURDIR)":/work \
 	-w /work \
 	-e GRADLE_USER_HOME=/work/.gradle-docker \
