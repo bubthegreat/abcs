@@ -251,12 +251,10 @@ class AppViewModel(private val store: ProgressStore) : ViewModel() {
         viewModelScope.launch { store.setKidMode(true) }
     }
 
-    /** Returns false when the pin doesn't match; kid mode stays on. */
-    fun exitKidMode(pin: String): Boolean {
-        if (pin != state.value.parentPin) return false
+    /** Play and Learn modes are both kid-safe; no PIN to move between them. */
+    fun exitKidMode() {
         closeDeck()
         viewModelScope.launch { store.setKidMode(false) }
-        return true
     }
 
     fun redeemStars(count: Int) {

@@ -102,7 +102,6 @@ fun App(vm: AppViewModel, audio: AudioBox, ink: InkBox) {
 @Composable
 private fun KidMode(vm: AppViewModel, state: AppState, audio: AudioBox, ink: InkBox) {
     val openDeckId by vm.openDeckId.collectAsState()
-    var showExitDialog by remember { mutableStateOf(false) }
     var showKidSwitch by remember { mutableStateOf(false) }
     var showStarBurst by remember { mutableStateOf(false) }
     var lastBank by remember { mutableStateOf(-1) }
@@ -118,31 +117,20 @@ private fun KidMode(vm: AppViewModel, state: AppState, audio: AudioBox, ink: Ink
         lastBank = state.starBank
     }
 
-    if (showExitDialog) {
-        PinDialog(
-            title = "Parents only!",
-            onSubmit = { pin ->
-                if (vm.exitKidMode(pin)) showExitDialog = false
-                vm.exitKidMode(pin)
-            },
-            onDismiss = { showExitDialog = false },
-        )
-    }
-
     if (showKidSwitch) {
         ProfileDialog(vm, state, onDismiss = { showKidSwitch = false }, allowAdd = false)
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
         if (openDeckId == null) {
-            BackHandler { /* stay in kid mode; exit only via PIN */ }
+            BackHandler { vm.exitKidMode() }
             KidHome(
                 vm = vm,
                 state = state,
                 audio = audio,
                 ink = ink,
                 onDeckTap = { vm.openDeck(it) },
-                onExitTap = { showExitDialog = true },
+                onExitTap = { vm.exitKidMode() },
                 onProfileTap = { showKidSwitch = true },
             )
         } else {
@@ -206,7 +194,7 @@ private fun SetPinDialog(onSet: (String) -> Unit, onDismiss: () -> Unit) {
         title = { Text("Set a parent PIN") },
         text = {
             Column {
-                Text("Needed to leave kid mode later.", fontSize = 14.sp)
+                Text("Locks the parent settings screen.", fontSize = 14.sp)
                 OutlinedTextField(
                     value = entry,
                     onValueChange = { if (it.length <= 4 && it.all(Char::isDigit)) entry = it },
@@ -246,7 +234,7 @@ private fun StarBar(state: AppState, onExitTap: (() -> Unit)? = null, onProfileT
         Spacer(Modifier.padding(horizontal = 8.dp))
         Text("${state.starProgress}/$CORRECTS_PER_STAR", fontSize = 14.sp, color = Color.Gray)
         if (onExitTap != null) {
-            TextButton(onClick = onExitTap) { Text("👨‍👩‍👧", fontSize = 20.sp) }
+            TextButton(onClick = onExitTap) { Text("📚 Learn", fontSize = 16.sp) }
         }
     }
 }
@@ -429,16 +417,32 @@ private fun HomeScreen(
     var tab by remember { mutableStateOf(0) }
     var showProfiles by remember { mutableStateOf(false) }
     var showSetPin by remember { mutableStateOf(false) }
+    var showParentPin by remember { mutableStateOf(false) }
     val activeProfile = state.profiles.firstOrNull { it.id == state.activeProfileId }
 
     if (showProfiles) {
-        ProfileDialog(vm, state, onDismiss = { showProfiles = false })
+        ProfileDialog(vm, state, onDismiss = { showProfiles = false }, allowAdd = false)
     }
 
     if (showSetPin) {
         SetPinDialog(
-            onSet = { pin -> vm.setPin(pin); vm.enterKidMode(); showSetPin = false },
+            onSet = { pin -> vm.setPin(pin); showSetPin = false; onParentOpen() },
             onDismiss = { showSetPin = false },
+        )
+    }
+
+    if (showParentPin) {
+        PinDialog(
+            title = "Parents only!",
+            onSubmit = { pin ->
+                val ok = pin == state.parentPin
+                if (ok) {
+                    showParentPin = false
+                    onParentOpen()
+                }
+                ok
+            },
+            onDismiss = { showParentPin = false },
         )
     }
 
@@ -472,10 +476,10 @@ private fun HomeScreen(
                     fontWeight = FontWeight.Bold,
                 )
                 Spacer(Modifier.weight(1f))
-                Button(
-                    onClick = { if (state.parentPin == null) showSetPin = true else vm.enterKidMode() },
-                ) { Text("▶ Play!", fontSize = 16.sp) }
-                TextButton(onClick = onParentOpen) { Text("⚙️", fontSize = 22.sp) }
+                Button(onClick = { vm.enterKidMode() }) { Text("▶ Play!", fontSize = 16.sp) }
+                TextButton(
+                    onClick = { if (state.parentPin == null) showSetPin = true else showParentPin = true },
+                ) { Text("⚙️", fontSize = 22.sp) }
             }
             val spec = tabs[tab]
             val subject = spec.subject
@@ -900,6 +904,53 @@ private fun ParentScreen(vm: AppViewModel, state: AppState, audio: AudioBox, onC
         }
         LazyColumn(modifier = Modifier.weight(1f)) {
             item {
+                Text("Kids", fontSize = 16.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 8.dp))
+                Text(
+                    "Tap a kid to switch — everything below is for the ✅ kid.",
+                    fontSize = 13.sp,
+                    color = Color.Gray,
+                )
+            }
+            items(state.profiles, key = { "kid_${it.id}" }) { profile ->
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { vm.switchProfile(profile.id) }
+                        .padding(vertical = 4.dp),
+                ) {
+                    Text(
+                        if (profile.id == state.activeProfileId) "✅ ${profile.name}" else "👦 ${profile.name}",
+                        fontSize = 16.sp,
+                        fontWeight = if (profile.id == state.activeProfileId) FontWeight.Bold else FontWeight.Normal,
+                        modifier = Modifier.weight(1f),
+                    )
+                    TextButton(onClick = { renameTarget = profile }) { Text("Rename") }
+                    if (state.profiles.size > 1) {
+                        TextButton(onClick = { deleteTarget = profile }) { Text("Remove") }
+                    }
+                }
+            }
+            item {
+                var newKidName by remember { mutableStateOf("") }
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                    OutlinedTextField(
+                        value = newKidName,
+                        onValueChange = { newKidName = it },
+                        label = { Text("New kid's name") },
+                        modifier = Modifier.weight(1f),
+                    )
+                    TextButton(
+                        onClick = {
+                            if (newKidName.isNotBlank()) {
+                                vm.addProfile(newKidName)
+                                newKidName = ""
+                            }
+                        },
+                    ) { Text("Add") }
+                }
+            }
+            item {
                 val activeName = state.profiles.firstOrNull { it.id == state.activeProfileId }?.name ?: ""
                 Text(
                     "Settings for: $activeName",
@@ -1003,34 +1054,6 @@ private fun ParentScreen(vm: AppViewModel, state: AppState, audio: AudioBox, onC
             }
             item {
                 LetterRecordings(audio)
-            }
-            item {
-                Text("Kids", fontSize = 16.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 16.dp))
-                Text(
-                    "Tap a kid to switch — homework, stars, and progress above are for the ✅ kid.",
-                    fontSize = 13.sp,
-                    color = Color.Gray,
-                )
-            }
-            items(state.profiles, key = { it.id }) { profile ->
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { vm.switchProfile(profile.id) }
-                        .padding(vertical = 4.dp),
-                ) {
-                    Text(
-                        if (profile.id == state.activeProfileId) "✅ ${profile.name}" else "👦 ${profile.name}",
-                        fontSize = 16.sp,
-                        fontWeight = if (profile.id == state.activeProfileId) FontWeight.Bold else FontWeight.Normal,
-                        modifier = Modifier.weight(1f),
-                    )
-                    TextButton(onClick = { renameTarget = profile }) { Text("Rename") }
-                    if (state.profiles.size > 1) {
-                        TextButton(onClick = { deleteTarget = profile }) { Text("Remove") }
-                    }
-                }
             }
         }
     }
