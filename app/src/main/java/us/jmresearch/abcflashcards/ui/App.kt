@@ -2,6 +2,7 @@ package us.jmresearch.abcflashcards.ui
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -13,6 +14,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.material3.Switch
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
@@ -100,6 +103,20 @@ fun App(vm: AppViewModel, audio: AudioBox, ink: InkBox) {
 private fun KidMode(vm: AppViewModel, state: AppState, audio: AudioBox, ink: InkBox) {
     val openDeckId by vm.openDeckId.collectAsState()
     var showExitDialog by remember { mutableStateOf(false) }
+    var showKidSwitch by remember { mutableStateOf(false) }
+    var showStarBurst by remember { mutableStateOf(false) }
+    var lastBank by remember { mutableStateOf(-1) }
+
+    // Star celebration: bank went up while playing.
+    androidx.compose.runtime.LaunchedEffect(state.starBank) {
+        if (lastBank >= 0 && state.starBank > lastBank) {
+            showStarBurst = true
+            audio.play("star_earned", "You earned a star!")
+            kotlinx.coroutines.delay(2200)
+            showStarBurst = false
+        }
+        lastBank = state.starBank
+    }
 
     if (showExitDialog) {
         PinDialog(
@@ -112,19 +129,48 @@ private fun KidMode(vm: AppViewModel, state: AppState, audio: AudioBox, ink: Ink
         )
     }
 
-    if (openDeckId == null) {
-        BackHandler { /* stay in kid mode; exit only via PIN */ }
-        KidHome(
-            vm = vm,
-            state = state,
-            audio = audio,
-            ink = ink,
-            onDeckTap = { vm.openDeck(it) },
-            onExitTap = { showExitDialog = true },
-        )
-    } else {
-        BackHandler { vm.closeDeck() }
-        QuizScreen(vm = vm, state = state, audio = audio, onClose = { vm.closeDeck() })
+    if (showKidSwitch) {
+        ProfileDialog(vm, state, onDismiss = { showKidSwitch = false }, allowAdd = false)
+    }
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        if (openDeckId == null) {
+            BackHandler { /* stay in kid mode; exit only via PIN */ }
+            KidHome(
+                vm = vm,
+                state = state,
+                audio = audio,
+                ink = ink,
+                onDeckTap = { vm.openDeck(it) },
+                onExitTap = { showExitDialog = true },
+                onProfileTap = { showKidSwitch = true },
+            )
+        } else {
+            BackHandler { vm.closeDeck() }
+            QuizScreen(vm = vm, state = state, audio = audio, onClose = { vm.closeDeck() })
+        }
+
+        androidx.compose.animation.AnimatedVisibility(
+            visible = showStarBurst,
+            enter = androidx.compose.animation.scaleIn() + androidx.compose.animation.fadeIn(),
+            exit = androidx.compose.animation.scaleOut() + androidx.compose.animation.fadeOut(),
+            modifier = Modifier.align(Alignment.Center),
+        ) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier
+                    .background(Color(0xEEFFF8E1), RoundedCornerShape(24.dp))
+                    .padding(40.dp),
+            ) {
+                Text("⭐", fontSize = 110.sp)
+                Text(
+                    "You earned a star!",
+                    fontSize = 30.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFFF57F17),
+                )
+            }
+        }
     }
 }
 
@@ -178,11 +224,19 @@ private fun SetPinDialog(onSet: (String) -> Unit, onDismiss: () -> Unit) {
 }
 
 @Composable
-private fun StarBar(state: AppState, onExitTap: (() -> Unit)? = null) {
+private fun StarBar(state: AppState, onExitTap: (() -> Unit)? = null, onProfileTap: (() -> Unit)? = null) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
     ) {
+        if (onProfileTap != null) {
+            val name = state.profiles.firstOrNull { it.id == state.activeProfileId }?.name ?: ""
+            AssistChip(
+                onClick = onProfileTap,
+                label = { Text("👦 $name", fontSize = 16.sp) },
+            )
+            Spacer(Modifier.padding(horizontal = 6.dp))
+        }
         Text("⭐ ${state.starBank}", fontSize = 24.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.padding(horizontal = 8.dp))
         LinearProgressIndicator(
@@ -205,6 +259,7 @@ private fun KidHome(
     ink: InkBox,
     onDeckTap: (String) -> Unit,
     onExitTap: () -> Unit,
+    onProfileTap: () -> Unit,
 ) {
     var tab by remember { mutableStateOf(0) }
     Scaffold(
@@ -222,7 +277,7 @@ private fun KidHome(
         },
     ) { padding ->
         Column(modifier = Modifier.fillMaxSize().padding(padding)) {
-            StarBar(state, onExitTap)
+            StarBar(state, onExitTap, onProfileTap)
             val spec = tabs[tab]
             val subject = spec.subject
             if (subject == null) {
@@ -456,6 +511,13 @@ private fun DeckTile(
         shape = RoundedCornerShape(16.dp),
         modifier = Modifier
             .height(104.dp)
+            .then(
+                if (isHomework) {
+                    Modifier.border(4.dp, Color(0xFFFFC107), RoundedCornerShape(16.dp))
+                } else {
+                    Modifier
+                },
+            )
             .clickable(enabled = enabled) { onDeckTap(status.deck.id) },
     ) {
         Box(
@@ -466,7 +528,7 @@ private fun DeckTile(
         ) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(
-                    text = (if (isHomework) "📌 " else "") + when {
+                    text = (if (isHomework) "🌟 " else "") + when {
                         !enabled -> "🔒 ${status.deck.title}"
                         complete -> "⭐ ${status.deck.title}"
                         else -> status.deck.title
@@ -702,7 +764,12 @@ private fun LetterRecordings(audio: AudioBox) {
 }
 
 @Composable
-private fun ProfileDialog(vm: AppViewModel, state: AppState, onDismiss: () -> Unit) {
+private fun ProfileDialog(
+    vm: AppViewModel,
+    state: AppState,
+    onDismiss: () -> Unit,
+    allowAdd: Boolean = true,
+) {
     var newName by remember { mutableStateOf("") }
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -725,22 +792,24 @@ private fun ProfileDialog(vm: AppViewModel, state: AppState, onDismiss: () -> Un
                         )
                     }
                 }
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    OutlinedTextField(
-                        value = newName,
-                        onValueChange = { newName = it },
-                        label = { Text("New kid's name") },
-                        modifier = Modifier.weight(1f),
-                    )
-                    TextButton(
-                        onClick = {
-                            if (newName.isNotBlank()) {
-                                vm.addProfile(newName)
-                                newName = ""
-                                onDismiss()
-                            }
-                        },
-                    ) { Text("Add") }
+                if (allowAdd) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        OutlinedTextField(
+                            value = newName,
+                            onValueChange = { newName = it },
+                            label = { Text("New kid's name") },
+                            modifier = Modifier.weight(1f),
+                        )
+                        TextButton(
+                            onClick = {
+                                if (newName.isNotBlank()) {
+                                    vm.addProfile(newName)
+                                    newName = ""
+                                    onDismiss()
+                                }
+                            },
+                        ) { Text("Add") }
+                    }
                 }
             }
         },
@@ -866,6 +935,12 @@ private fun ParentScreen(vm: AppViewModel, state: AppState, audio: AudioBox, onC
                     Text("Decks", fontSize = 16.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
                     TextButton(onClick = { showResetAll = true }) { Text("Reset all") }
                 }
+                Row(modifier = Modifier.fillMaxWidth()) {
+                    Spacer(Modifier.weight(1f))
+                    Text("Homework", fontSize = 13.sp, color = Color.Gray, textAlign = TextAlign.Center, modifier = Modifier.width(100.dp))
+                    Text("Reset", fontSize = 13.sp, color = Color.Gray, textAlign = TextAlign.Center, modifier = Modifier.width(80.dp))
+                    Text("Lock", fontSize = 13.sp, color = Color.Gray, textAlign = TextAlign.Center, modifier = Modifier.width(90.dp))
+                }
             }
             items(state.deckStatuses, key = { it.deck.id }) { status ->
                 Row(
@@ -882,18 +957,23 @@ private fun ParentScreen(vm: AppViewModel, state: AppState, audio: AudioBox, onC
                         )
                     }
                     val assigned = status.deck.id in state.homework
-                    TextButton(onClick = { vm.toggleHomework(status.deck.id) }) {
-                        Text(
-                            if (assigned) "📌 HW" else "📌",
-                            color = if (assigned) MaterialTheme.colorScheme.primary else Color.LightGray,
+                    Box(modifier = Modifier.width(100.dp), contentAlignment = Alignment.Center) {
+                        Switch(
+                            checked = assigned,
+                            onCheckedChange = { vm.toggleHomework(status.deck.id) },
                         )
                     }
-                    TextButton(onClick = { resetTarget = status }) { Text("Reset") }
-                    when {
-                        status.deck.id in state.forceUnlocked ->
-                            TextButton(onClick = { vm.toggleForceUnlock(status.deck.id) }) { Text("Re-lock") }
-                        !status.unlocked ->
-                            TextButton(onClick = { vm.toggleForceUnlock(status.deck.id) }) { Text("Unlock") }
+                    Box(modifier = Modifier.width(80.dp), contentAlignment = Alignment.Center) {
+                        TextButton(onClick = { resetTarget = status }) { Text("Reset") }
+                    }
+                    Box(modifier = Modifier.width(90.dp), contentAlignment = Alignment.Center) {
+                        when {
+                            status.deck.id in state.forceUnlocked ->
+                                TextButton(onClick = { vm.toggleForceUnlock(status.deck.id) }) { Text("Re-lock") }
+                            !status.unlocked ->
+                                TextButton(onClick = { vm.toggleForceUnlock(status.deck.id) }) { Text("Unlock") }
+                            else -> Text("—", color = Color.LightGray)
+                        }
                     }
                 }
             }
@@ -907,15 +987,16 @@ private fun ParentScreen(vm: AppViewModel, state: AppState, audio: AudioBox, onC
                         Text("5-sentence story = 1 star", fontSize = 13.sp, color = Color.Gray)
                     }
                     val assigned = WRITING_HOMEWORK_ID in state.homework
-                    TextButton(onClick = { vm.toggleHomework(WRITING_HOMEWORK_ID) }) {
-                        Text(
-                            if (assigned) "📌 HW" else "📌",
-                            color = if (assigned) MaterialTheme.colorScheme.primary else Color.LightGray,
+                    Box(modifier = Modifier.width(100.dp), contentAlignment = Alignment.Center) {
+                        Switch(
+                            checked = assigned,
+                            onCheckedChange = { vm.toggleHomework(WRITING_HOMEWORK_ID) },
                         )
                     }
+                    Spacer(Modifier.width(170.dp))
                 }
                 Text(
-                    "📌 = homework. When any 📌 is set, stars only come from pinned activities.",
+                    "Homework on = that activity earns stars. If nothing is homework, everything earns stars.",
                     fontSize = 13.sp,
                     color = Color.Gray,
                 )
@@ -925,15 +1006,24 @@ private fun ParentScreen(vm: AppViewModel, state: AppState, audio: AudioBox, onC
             }
             item {
                 Text("Kids", fontSize = 16.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 16.dp))
+                Text(
+                    "Tap a kid to switch — homework, stars, and progress above are for the ✅ kid.",
+                    fontSize = 13.sp,
+                    color = Color.Gray,
+                )
             }
             items(state.profiles, key = { it.id }) { profile ->
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { vm.switchProfile(profile.id) }
+                        .padding(vertical = 4.dp),
                 ) {
                     Text(
-                        if (profile.id == state.activeProfileId) "✅ ${profile.name}" else profile.name,
+                        if (profile.id == state.activeProfileId) "✅ ${profile.name}" else "👦 ${profile.name}",
                         fontSize = 16.sp,
+                        fontWeight = if (profile.id == state.activeProfileId) FontWeight.Bold else FontWeight.Normal,
                         modifier = Modifier.weight(1f),
                     )
                     TextButton(onClick = { renameTarget = profile }) { Text("Rename") }
