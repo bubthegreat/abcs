@@ -90,14 +90,14 @@ All content lives in `data/Curriculum.kt` as plain Kotlin lists. No DB, no migra
 Each unlocks when the previous group is mastered. Group 1 always unlocked.
 
 ### Words
-- **CVC Set 1** (unlock: letter group 1): sat, pat, tap, sap, pin, tin, nap, pan, tan, sit, pit, nip
+- **CVC Set 1** (unlock: letter group 1): sat, pat, tap, sap, pin, tin, nap, pan, tan, sit, pit, nip, in
 - **CVC Set 2** (unlock: letter group 2): cat, hat, mat, rat, red, hen, ten, met, pet, dim, rim, ram, mad, sad, dad, ham
 - **CVC Set 3** (unlock: letter group 3): dog, log, bug, fun, run, sun, bed, big, dig, leg, gum, cup, cut, lot, fog, bat
 - **Sight Words** (unlock: CVC Set 2): the, a, I, to, is, it (Dolch pre-K subset)
 
 ### Phrases
-- **Phrase Set 1** (unlock: CVC Set 1 + Sight Words): a cat sat, tap it, a pin, sit in it, it is a nap
-- **Phrase Set 2** (unlock: CVC Set 2 + Sight Words): the red hen, a big dog, I sat, the cat is mad, a pet ram
+- **Phrase Set 1** (unlock: CVC Set 1 + Sight Words): I sat, tap it, a pin, sit in it, it is a nap
+- **Phrase Set 2** (unlock: CVC Set 2 + Sight Words): the red hen, a red hat, a sad dad, the cat is mad, a pet ram
 
 Constraint: phrases use only words from prerequisite decks (+ sight words). Enforced by automated test.
 
