@@ -122,6 +122,18 @@ Constraint: phrases use only words from prerequisite decks (+ sight words). Enfo
 - **Curriculum validation test:** every CVC word uses only letters from its prerequisite letter groups; every phrase uses only words from its prerequisite decks + sight words. Fails build if content edit breaks decodability.
 - **UI smoke test:** app launches, home renders all subjects, deck opens, ✓ advances card.
 
+## 8.5 Iteration 2 (added 2026-07-23 after first tablet session)
+
+User feedback drove these changes:
+
+- **Tabs:** bottom navigation bar (Letters / Words / Phrases / Math) replaces single scrolling home grid.
+- **Deck completion:** when every item in a deck is mastered, DeckScreen shows a celebration screen ("<Deck> Mastered!" + Back to menu / Keep practicing). "Keep practicing" enters review mode and keeps serving cards.
+- **In-deck progress:** progress bar + "X/Y ⭐" at top of DeckScreen; pips under the card show current item's correctCount vs threshold. Deck tiles show a mini progress bar and ⭐ when complete.
+- **Reset UX:** parent screen reset is an always-enabled button per deck with a confirmation dialog. The force-unlock Switch was removed (its disabled state next to Reset read as "reset disabled"); replaced with explicit "Unlock" / "Re-lock" text buttons shown only when applicable.
+- **Parent access:** visible ⚙️ button on home (long-press gate deferred to solo-kid mode).
+- **Kid profiles:** multiple named profiles (add/switch via chip on home; delete in parent screen). Each profile has fully separate progress/threshold/force-unlocks, namespaced in the same DataStore (`progress_v1_<pid>` etc.). Legacy un-namespaced keys are read as a fallback for the first profile (`p1`), so pre-profile progress migrates transparently. Threshold is per-profile.
+- Curriculum for the 7–9 year old: follow-up project, not in this iteration.
+
 ## 9. Future (explicitly out of scope now)
 
 - Solo-kid quiz mode (tap-the-answer cards, audio prompts, TTS or recorded voice)

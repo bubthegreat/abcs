@@ -1,11 +1,10 @@
 package us.jmresearch.abcflashcards.data
 
 import android.content.Context
+import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.emptyPreferences
-import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
-import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
@@ -13,48 +12,125 @@ import kotlinx.coroutines.flow.map
 
 private val Context.dataStore by preferencesDataStore(name = "progress")
 
+private const val DEFAULT_PROFILE_ID = "p1"
+private const val DEFAULT_PROFILE_NAME = "Kid 1"
+
 class ProgressStore(private val context: Context) {
 
-    private val progressKey = stringPreferencesKey("progress_v1")
-    private val thresholdKey = intPreferencesKey("threshold_v1")
-    private val forceUnlockedKey = stringSetPreferencesKey("force_unlocked_v1")
+    private val profilesKey = stringPreferencesKey("profiles_v1")
+    private val activeProfileKey = stringPreferencesKey("active_profile_v1")
 
-    val progress: Flow<Map<String, ItemProgress>> = context.dataStore.data
-        .catch { emit(emptyPreferences()) }
-        .map { prefs -> decodeProgress(prefs[progressKey] ?: "") }
+    // Legacy single-profile keys (pre-profiles installs); read as fallback for p1.
+    private val legacyProgressKey = stringPreferencesKey("progress_v1")
+    private val legacyThresholdKey = androidx.datastore.preferences.core.intPreferencesKey("threshold_v1")
 
-    val threshold: Flow<Int> = context.dataStore.data
-        .catch { emit(emptyPreferences()) }
-        .map { prefs -> prefs[thresholdKey] ?: 3 }
+    private fun progressKey(pid: String) = stringPreferencesKey("progress_v1_$pid")
+    private fun thresholdKey(pid: String) = stringPreferencesKey("threshold_v1_$pid")
+    private fun forceUnlockedKey(pid: String) = stringPreferencesKey("force_unlocked_v1_$pid")
 
-    val forceUnlocked: Flow<Set<String>> = context.dataStore.data
+    private val safeData: Flow<Preferences> = context.dataStore.data
         .catch { emit(emptyPreferences()) }
-        .map { prefs -> prefs[forceUnlockedKey] ?: emptySet() }
+
+    private fun activePid(prefs: Preferences): String =
+        prefs[activeProfileKey] ?: DEFAULT_PROFILE_ID
+
+    private fun profilesOf(prefs: Preferences): List<Profile> {
+        val decoded = decodeProfiles(prefs[profilesKey] ?: "")
+        return decoded.ifEmpty { listOf(Profile(DEFAULT_PROFILE_ID, DEFAULT_PROFILE_NAME)) }
+    }
+
+    private fun rawProgress(prefs: Preferences, pid: String): String =
+        prefs[progressKey(pid)]
+            ?: (if (pid == DEFAULT_PROFILE_ID) prefs[legacyProgressKey] else null)
+            ?: ""
+
+    private fun rawThreshold(prefs: Preferences, pid: String): Int =
+        prefs[thresholdKey(pid)]?.toIntOrNull()
+            ?: (if (pid == DEFAULT_PROFILE_ID) prefs[legacyThresholdKey] else null)
+            ?: 3
+
+    val profiles: Flow<List<Profile>> = safeData.map { profilesOf(it) }
+
+    val activeProfileId: Flow<String> = safeData.map { activePid(it) }
+
+    val progress: Flow<Map<String, ItemProgress>> = safeData.map { prefs ->
+        decodeProgress(rawProgress(prefs, activePid(prefs)))
+    }
+
+    val threshold: Flow<Int> = safeData.map { prefs ->
+        rawThreshold(prefs, activePid(prefs))
+    }
+
+    val forceUnlocked: Flow<Set<String>> = safeData.map { prefs ->
+        (prefs[forceUnlockedKey(activePid(prefs))] ?: "")
+            .split(";").filter { it.isNotBlank() }.toSet()
+    }
 
     suspend fun updateItem(itemId: String, transform: (ItemProgress) -> ItemProgress) {
         context.dataStore.edit { prefs ->
-            val map = decodeProgress(prefs[progressKey] ?: "").toMutableMap()
+            val pid = activePid(prefs)
+            val map = decodeProgress(rawProgress(prefs, pid)).toMutableMap()
             map[itemId] = transform(map[itemId] ?: ItemProgress())
-            prefs[progressKey] = encodeProgress(map)
+            prefs[progressKey(pid)] = encodeProgress(map)
         }
     }
 
     suspend fun resetDeck(itemIds: List<String>) {
         context.dataStore.edit { prefs ->
-            val map = decodeProgress(prefs[progressKey] ?: "").toMutableMap()
+            val pid = activePid(prefs)
+            val map = decodeProgress(rawProgress(prefs, pid)).toMutableMap()
             itemIds.forEach { map.remove(it) }
-            prefs[progressKey] = encodeProgress(map)
+            prefs[progressKey(pid)] = encodeProgress(map)
         }
     }
 
     suspend fun setThreshold(value: Int) {
-        context.dataStore.edit { it[thresholdKey] = value.coerceIn(1, 10) }
+        context.dataStore.edit { prefs ->
+            prefs[thresholdKey(activePid(prefs))] = value.coerceIn(1, 10).toString()
+        }
     }
 
     suspend fun setForceUnlocked(deckId: String, unlocked: Boolean) {
         context.dataStore.edit { prefs ->
-            val current = prefs[forceUnlockedKey] ?: emptySet()
-            prefs[forceUnlockedKey] = if (unlocked) current + deckId else current - deckId
+            val pid = activePid(prefs)
+            val key = forceUnlockedKey(pid)
+            val current = (prefs[key] ?: "").split(";").filter { it.isNotBlank() }.toMutableSet()
+            if (unlocked) current.add(deckId) else current.remove(deckId)
+            prefs[key] = current.joinToString(";")
+        }
+    }
+
+    suspend fun addProfile(name: String) {
+        context.dataStore.edit { prefs ->
+            val clean = sanitizeProfileName(name)
+            if (clean.isBlank()) return@edit
+            val current = profilesOf(prefs)
+            val newProfile = Profile(nextProfileId(current), clean)
+            prefs[profilesKey] = encodeProfiles(current + newProfile)
+            prefs[activeProfileKey] = newProfile.id
+        }
+    }
+
+    suspend fun switchProfile(id: String) {
+        context.dataStore.edit { prefs ->
+            if (profilesOf(prefs).any { it.id == id }) prefs[activeProfileKey] = id
+        }
+    }
+
+    suspend fun deleteProfile(id: String) {
+        context.dataStore.edit { prefs ->
+            val current = profilesOf(prefs)
+            if (current.size <= 1) return@edit // never delete the last profile
+            val remaining = current.filterNot { it.id == id }
+            prefs[profilesKey] = encodeProfiles(remaining)
+            if (activePid(prefs) == id) prefs[activeProfileKey] = remaining.first().id
+            prefs.remove(progressKey(id))
+            prefs.remove(thresholdKey(id))
+            prefs.remove(forceUnlockedKey(id))
+            if (id == DEFAULT_PROFILE_ID) {
+                prefs.remove(legacyProgressKey)
+                prefs.remove(legacyThresholdKey)
+            }
         }
     }
 }

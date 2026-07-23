@@ -1,10 +1,8 @@
 package us.jmresearch.abcflashcards.ui
 
 import androidx.activity.compose.BackHandler
-import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -14,15 +12,25 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -47,11 +55,13 @@ private val subjectColors = mapOf(
     Subject.MATH to Color(0xFF42A5F5),
 )
 
-private val subjectTitles = mapOf(
-    Subject.LETTERS to "Letters",
-    Subject.WORDS to "Words",
-    Subject.PHRASES to "Phrases",
-    Subject.MATH to "Math",
+private data class TabSpec(val subject: Subject, val title: String, val emoji: String)
+
+private val tabs = listOf(
+    TabSpec(Subject.LETTERS, "Letters", "🔤"),
+    TabSpec(Subject.WORDS, "Words", "📖"),
+    TabSpec(Subject.PHRASES, "Phrases", "💬"),
+    TabSpec(Subject.MATH, "Math", "🔢"),
 )
 
 @Composable
@@ -61,13 +71,14 @@ fun App(vm: AppViewModel) {
 
     when (screen) {
         "home" -> HomeScreen(
+            vm = vm,
             state = state,
             onDeckTap = { deckId -> vm.openDeck(deckId); screen = "deck" },
             onParentOpen = { screen = "parent" },
         )
         "deck" -> {
             BackHandler { vm.closeDeck(); screen = "home" }
-            DeckScreen(vm = vm, onClose = { vm.closeDeck(); screen = "home" })
+            DeckScreen(vm = vm, state = state, onClose = { vm.closeDeck(); screen = "home" })
         }
         "parent" -> {
             BackHandler { screen = "home" }
@@ -76,40 +87,64 @@ fun App(vm: AppViewModel) {
     }
 }
 
-@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun HomeScreen(state: AppState, onDeckTap: (String) -> Unit, onParentOpen: () -> Unit) {
-    LazyVerticalGrid(
-        columns = GridCells.Fixed(2),
-        modifier = Modifier.fillMaxSize().padding(12.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
-    ) {
-        item(span = { GridItemSpan(2) }) {
-            Text(
-                "Let's Learn!",
-                fontSize = 34.sp,
-                fontWeight = FontWeight.Bold,
-                textAlign = TextAlign.Center,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 16.dp)
-                    .combinedClickable(onClick = {}, onLongClick = onParentOpen),
-            )
-        }
-        Subject.entries.forEach { subject ->
-            val decks = state.deckStatuses.filter { it.deck.subject == subject }
-            if (decks.isEmpty()) return@forEach
-            item(span = { GridItemSpan(2) }) {
-                Text(
-                    subjectTitles.getValue(subject),
-                    fontSize = 22.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.padding(top = 8.dp),
-                )
+private fun HomeScreen(
+    vm: AppViewModel,
+    state: AppState,
+    onDeckTap: (String) -> Unit,
+    onParentOpen: () -> Unit,
+) {
+    var tab by remember { mutableStateOf(0) }
+    var showProfiles by remember { mutableStateOf(false) }
+    val activeProfile = state.profiles.firstOrNull { it.id == state.activeProfileId }
+
+    if (showProfiles) {
+        ProfileDialog(vm, state, onDismiss = { showProfiles = false })
+    }
+
+    Scaffold(
+        bottomBar = {
+            NavigationBar {
+                tabs.forEachIndexed { i, spec ->
+                    NavigationBarItem(
+                        selected = tab == i,
+                        onClick = { tab = i },
+                        icon = { Text(spec.emoji, fontSize = 24.sp) },
+                        label = { Text(spec.title, fontSize = 14.sp) },
+                    )
+                }
             }
-            items(decks, key = { it.deck.id }) { status ->
-                DeckTile(status, subjectColors.getValue(subject), onDeckTap)
+        },
+    ) { padding ->
+        Column(modifier = Modifier.fillMaxSize().padding(padding)) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+            ) {
+                AssistChip(
+                    onClick = { showProfiles = true },
+                    label = { Text("👦 ${activeProfile?.name ?: "Kid 1"}", fontSize = 16.sp) },
+                )
+                Spacer(Modifier.weight(1f))
+                Text(
+                    "Let's Learn!",
+                    fontSize = 28.sp,
+                    fontWeight = FontWeight.Bold,
+                )
+                Spacer(Modifier.weight(1f))
+                TextButton(onClick = onParentOpen) { Text("⚙️", fontSize = 22.sp) }
+            }
+            val spec = tabs[tab]
+            val decks = state.deckStatuses.filter { it.deck.subject == spec.subject }
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(2),
+                modifier = Modifier.fillMaxSize().padding(horizontal = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                items(decks, key = { it.deck.id }) { status ->
+                    DeckTile(status, subjectColors.getValue(spec.subject), onDeckTap)
+                }
             }
         }
     }
@@ -118,10 +153,11 @@ private fun HomeScreen(state: AppState, onDeckTap: (String) -> Unit, onParentOpe
 @Composable
 private fun DeckTile(status: DeckStatus, color: Color, onDeckTap: (String) -> Unit) {
     val enabled = status.unlocked
+    val complete = status.masteredCount == status.total
     Card(
         shape = RoundedCornerShape(16.dp),
         modifier = Modifier
-            .height(96.dp)
+            .height(104.dp)
             .clickable(enabled = enabled) { onDeckTap(status.deck.id) },
     ) {
         Box(
@@ -132,7 +168,11 @@ private fun DeckTile(status: DeckStatus, color: Color, onDeckTap: (String) -> Un
         ) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(
-                    text = if (enabled) status.deck.title else "🔒 ${status.deck.title}",
+                    text = when {
+                        !enabled -> "🔒 ${status.deck.title}"
+                        complete -> "⭐ ${status.deck.title}"
+                        else -> status.deck.title
+                    },
                     color = Color.White,
                     fontSize = 18.sp,
                     fontWeight = FontWeight.Bold,
@@ -142,22 +182,52 @@ private fun DeckTile(status: DeckStatus, color: Color, onDeckTap: (String) -> Un
                     color = Color.White.copy(alpha = 0.9f),
                     fontSize = 14.sp,
                 )
+                LinearProgressIndicator(
+                    progress = { if (status.total == 0) 0f else status.masteredCount.toFloat() / status.total },
+                    color = Color.White,
+                    trackColor = Color.White.copy(alpha = 0.3f),
+                    modifier = Modifier.padding(top = 6.dp).fillMaxWidth(0.6f),
+                )
             }
         }
     }
 }
 
 @Composable
-private fun DeckScreen(vm: AppViewModel, onClose: () -> Unit) {
+private fun DeckScreen(vm: AppViewModel, state: AppState, onClose: () -> Unit) {
     val card by vm.currentCard.collectAsState()
+    val openDeckId by vm.openDeckId.collectAsState()
+    val reviewMode by vm.reviewMode.collectAsState()
     var showBack by remember { mutableStateOf(false) }
+
+    val status = state.deckStatuses.firstOrNull { it.deck.id == openDeckId }
+    val complete = status != null && status.masteredCount == status.total && status.total > 0
+
+    if (complete && !reviewMode) {
+        CelebrationScreen(
+            deckTitle = status!!.deck.title,
+            onKeepPracticing = { vm.keepPracticing() },
+            onClose = onClose,
+        )
+        return
+    }
 
     Column(
         modifier = Modifier.fillMaxSize().padding(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        TextButton(onClick = onClose, modifier = Modifier.align(Alignment.Start)) {
-            Text("← Back", fontSize = 18.sp)
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+            TextButton(onClick = onClose) { Text("← Back", fontSize = 18.sp) }
+            Spacer(Modifier.weight(1f))
+            if (status != null) {
+                Text("${status.masteredCount}/${status.total} ⭐", fontSize = 16.sp)
+            }
+        }
+        if (status != null) {
+            LinearProgressIndicator(
+                progress = { status.masteredCount.toFloat() / status.total },
+                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+            )
         }
         Box(
             modifier = Modifier
@@ -188,6 +258,26 @@ private fun DeckScreen(vm: AppViewModel, onClose: () -> Unit) {
                 }
             }
         }
+        val c = card
+        if (c != null && status != null) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                modifier = Modifier.padding(bottom = 12.dp),
+            ) {
+                val count = state.progress[c.id]?.correctCount ?: 0
+                repeat(state.threshold) { i ->
+                    Box(
+                        modifier = Modifier
+                            .size(14.dp)
+                            .background(
+                                if (i < count) MaterialTheme.colorScheme.primary
+                                else MaterialTheme.colorScheme.primary.copy(alpha = 0.2f),
+                                CircleShape,
+                            ),
+                    )
+                }
+            }
+        }
         Row(
             modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -207,21 +297,134 @@ private fun DeckScreen(vm: AppViewModel, onClose: () -> Unit) {
 }
 
 @Composable
+private fun CelebrationScreen(deckTitle: String, onKeepPracticing: () -> Unit, onClose: () -> Unit) {
+    Column(
+        modifier = Modifier.fillMaxSize().padding(24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        Text("🎉⭐🎉", fontSize = 64.sp)
+        Text(
+            "$deckTitle Mastered!",
+            fontSize = 40.sp,
+            fontWeight = FontWeight.Bold,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.padding(vertical = 16.dp),
+        )
+        Text("Amazing job!", fontSize = 24.sp, color = Color.Gray)
+        Spacer(Modifier.height(40.dp))
+        Button(
+            onClick = onClose,
+            modifier = Modifier.fillMaxWidth(0.7f).height(64.dp),
+        ) { Text("Back to menu", fontSize = 20.sp) }
+        Spacer(Modifier.height(12.dp))
+        TextButton(onClick = onKeepPracticing) { Text("Keep practicing", fontSize = 18.sp) }
+    }
+}
+
+@Composable
+private fun ProfileDialog(vm: AppViewModel, state: AppState, onDismiss: () -> Unit) {
+    var newName by remember { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Done") } },
+        title = { Text("Who is learning?") },
+        text = {
+            Column {
+                state.profiles.forEach { profile ->
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { vm.switchProfile(profile.id); onDismiss() }
+                            .padding(vertical = 8.dp),
+                    ) {
+                        Text(
+                            if (profile.id == state.activeProfileId) "✅ ${profile.name}" else "👦 ${profile.name}",
+                            fontSize = 18.sp,
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    OutlinedTextField(
+                        value = newName,
+                        onValueChange = { newName = it },
+                        label = { Text("New kid's name") },
+                        modifier = Modifier.weight(1f),
+                    )
+                    TextButton(
+                        onClick = {
+                            if (newName.isNotBlank()) {
+                                vm.addProfile(newName)
+                                newName = ""
+                                onDismiss()
+                            }
+                        },
+                    ) { Text("Add") }
+                }
+            }
+        },
+    )
+}
+
+@Composable
 private fun ParentScreen(vm: AppViewModel, state: AppState, onClose: () -> Unit) {
+    var resetTarget by remember { mutableStateOf<DeckStatus?>(null) }
+    var deleteTarget by remember { mutableStateOf<us.jmresearch.abcflashcards.data.Profile?>(null) }
+
+    resetTarget?.let { target ->
+        AlertDialog(
+            onDismissRequest = { resetTarget = null },
+            title = { Text("Reset ${target.deck.title}?") },
+            text = { Text("All progress in this deck will be erased for the current kid. This cannot be undone.") },
+            confirmButton = {
+                TextButton(onClick = { vm.resetDeck(target.deck.id); resetTarget = null }) { Text("Reset") }
+            },
+            dismissButton = {
+                TextButton(onClick = { resetTarget = null }) { Text("Cancel") }
+            },
+        )
+    }
+
+    deleteTarget?.let { target ->
+        AlertDialog(
+            onDismissRequest = { deleteTarget = null },
+            title = { Text("Remove ${target.name}?") },
+            text = { Text("All of ${target.name}'s progress will be erased. This cannot be undone.") },
+            confirmButton = {
+                TextButton(onClick = { vm.deleteProfile(target.id); deleteTarget = null }) { Text("Remove") }
+            },
+            dismissButton = {
+                TextButton(onClick = { deleteTarget = null }) { Text("Cancel") }
+            },
+        )
+    }
+
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             TextButton(onClick = onClose) { Text("← Back", fontSize = 18.sp) }
             Spacer(Modifier.weight(1f))
             Text("Parent Settings", fontSize = 20.sp, fontWeight = FontWeight.Bold)
         }
-        Text("Mastery threshold: ${state.threshold}", fontSize = 16.sp, modifier = Modifier.padding(top = 12.dp))
-        Slider(
-            value = state.threshold.toFloat(),
-            onValueChange = { vm.setThreshold(it.toInt()) },
-            valueRange = 1f..10f,
-            steps = 8,
-        )
-        LazyVerticalGrid(columns = GridCells.Fixed(1), modifier = Modifier.weight(1f)) {
+        LazyColumn(modifier = Modifier.weight(1f)) {
+            item {
+                val activeName = state.profiles.firstOrNull { it.id == state.activeProfileId }?.name ?: ""
+                Text(
+                    "Settings for: $activeName",
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.padding(top = 8.dp),
+                )
+                Text("Mastery threshold: ${state.threshold}", fontSize = 16.sp, modifier = Modifier.padding(top = 12.dp))
+                Slider(
+                    value = state.threshold.toFloat(),
+                    onValueChange = { vm.setThreshold(it.toInt()) },
+                    valueRange = 1f..10f,
+                    steps = 8,
+                )
+                Text("Decks", fontSize = 16.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 8.dp))
+            }
             items(state.deckStatuses, key = { it.deck.id }) { status ->
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
@@ -236,12 +439,31 @@ private fun ParentScreen(vm: AppViewModel, state: AppState, onClose: () -> Unit)
                             color = Color.Gray,
                         )
                     }
-                    TextButton(onClick = { vm.resetDeck(status.deck.id) }) { Text("Reset") }
-                    Switch(
-                        checked = status.unlocked,
-                        onCheckedChange = { vm.toggleForceUnlock(status.deck.id) },
-                        enabled = status.deck.id in state.forceUnlocked || !status.unlocked,
+                    TextButton(onClick = { resetTarget = status }) { Text("Reset") }
+                    when {
+                        status.deck.id in state.forceUnlocked ->
+                            TextButton(onClick = { vm.toggleForceUnlock(status.deck.id) }) { Text("Re-lock") }
+                        !status.unlocked ->
+                            TextButton(onClick = { vm.toggleForceUnlock(status.deck.id) }) { Text("Unlock") }
+                    }
+                }
+            }
+            item {
+                Text("Kids", fontSize = 16.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 16.dp))
+            }
+            items(state.profiles, key = { it.id }) { profile ->
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                ) {
+                    Text(
+                        if (profile.id == state.activeProfileId) "✅ ${profile.name}" else profile.name,
+                        fontSize = 16.sp,
+                        modifier = Modifier.weight(1f),
                     )
+                    if (state.profiles.size > 1) {
+                        TextButton(onClick = { deleteTarget = profile }) { Text("Remove") }
+                    }
                 }
             }
         }

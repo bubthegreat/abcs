@@ -18,6 +18,7 @@ import us.jmresearch.abcflashcards.data.CardItem
 import us.jmresearch.abcflashcards.data.Curriculum
 import us.jmresearch.abcflashcards.data.Deck
 import us.jmresearch.abcflashcards.data.ItemProgress
+import us.jmresearch.abcflashcards.data.Profile
 import us.jmresearch.abcflashcards.data.ProgressStore
 import us.jmresearch.abcflashcards.engine.applyCorrect
 import us.jmresearch.abcflashcards.engine.applyWrong
@@ -32,6 +33,8 @@ data class AppState(
     val threshold: Int = 3,
     val forceUnlocked: Set<String> = emptySet(),
     val progress: Map<String, ItemProgress> = emptyMap(),
+    val profiles: List<Profile> = emptyList(),
+    val activeProfileId: String = "p1",
 )
 
 class AppViewModel(private val store: ProgressStore) : ViewModel() {
@@ -39,7 +42,10 @@ class AppViewModel(private val store: ProgressStore) : ViewModel() {
     private val random = Random(System.nanoTime())
 
     val state: StateFlow<AppState> =
-        combine(store.progress, store.threshold, store.forceUnlocked) { progress, threshold, force ->
+        combine(
+            store.progress, store.threshold, store.forceUnlocked,
+            store.profiles, store.activeProfileId,
+        ) { progress, threshold, force, profiles, activePid ->
             val statuses = Curriculum.decks.map { deck ->
                 DeckStatus(
                     deck = deck,
@@ -48,27 +54,40 @@ class AppViewModel(private val store: ProgressStore) : ViewModel() {
                     total = deck.items.size,
                 )
             }
-            AppState(statuses, threshold, force, progress)
+            AppState(statuses, threshold, force, progress, profiles, activePid)
         }.stateIn(viewModelScope, SharingStarted.Eagerly, AppState())
 
-    private val openDeckId = MutableStateFlow<String?>(null)
+    private val _openDeckId = MutableStateFlow<String?>(null)
+    val openDeckId: StateFlow<String?> = _openDeckId
+
     private val _currentCard = MutableStateFlow<CardItem?>(null)
     val currentCard: StateFlow<CardItem?> = _currentCard
+
+    /** True once the parent tapped "Keep practicing" on a fully mastered deck. */
+    private val _reviewMode = MutableStateFlow(false)
+    val reviewMode: StateFlow<Boolean> = _reviewMode
 
     private fun deckById(id: String?): Deck? = Curriculum.decks.firstOrNull { it.id == id }
 
     fun openDeck(deckId: String) {
-        openDeckId.value = deckId
+        _openDeckId.value = deckId
+        _reviewMode.value = false
         advance(lastShownId = null)
     }
 
     fun closeDeck() {
-        openDeckId.value = null
+        _openDeckId.value = null
         _currentCard.value = null
+        _reviewMode.value = false
+    }
+
+    fun keepPracticing() {
+        _reviewMode.value = true
+        advance(lastShownId = _currentCard.value?.id)
     }
 
     private fun advance(lastShownId: String?) {
-        val deck = deckById(openDeckId.value) ?: return
+        val deck = deckById(_openDeckId.value) ?: return
         val s = state.value
         _currentCard.value = pickNext(deck.items, s.progress, s.threshold, lastShownId, random)
     }
@@ -98,6 +117,19 @@ class AppViewModel(private val store: ProgressStore) : ViewModel() {
         viewModelScope.launch {
             store.setForceUnlocked(deckId, deckId !in state.value.forceUnlocked)
         }
+    }
+
+    fun addProfile(name: String) {
+        viewModelScope.launch { store.addProfile(name) }
+    }
+
+    fun switchProfile(id: String) {
+        closeDeck()
+        viewModelScope.launch { store.switchProfile(id) }
+    }
+
+    fun deleteProfile(id: String) {
+        viewModelScope.launch { store.deleteProfile(id) }
     }
 
     companion object {
