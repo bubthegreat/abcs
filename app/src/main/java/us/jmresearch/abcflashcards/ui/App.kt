@@ -240,6 +240,10 @@ private fun PinDialog(title: String, onSubmit: (String) -> Boolean, onDismiss: (
                     label = { Text("4-digit PIN") },
                     keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
                         keyboardType = androidx.compose.ui.text.input.KeyboardType.NumberPassword,
+                        imeAction = androidx.compose.ui.text.input.ImeAction.Done,
+                    ),
+                    keyboardActions = androidx.compose.foundation.text.KeyboardActions(
+                        onDone = { if (!onSubmit(entry)) { wrong = true; entry = "" } },
                     ),
                 )
                 if (wrong) Text("Wrong PIN", color = Color(0xFFD32F2F))
@@ -267,6 +271,10 @@ private fun SetPinDialog(onSet: (String) -> Unit, onDismiss: () -> Unit) {
                     label = { Text("4-digit PIN") },
                     keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
                         keyboardType = androidx.compose.ui.text.input.KeyboardType.NumberPassword,
+                        imeAction = androidx.compose.ui.text.input.ImeAction.Done,
+                    ),
+                    keyboardActions = androidx.compose.foundation.text.KeyboardActions(
+                        onDone = { if (entry.length == 4) onSet(entry) },
                     ),
                 )
             }
