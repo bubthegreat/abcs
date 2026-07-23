@@ -31,7 +31,8 @@ class ProgressStore(private val context: Context) {
     private fun starBankKey(pid: String) = stringPreferencesKey("star_bank_v1_$pid")
     private fun homeworkKey(pid: String) = stringPreferencesKey("homework_v1_$pid")
     private fun homeworkRewardsKey(pid: String) = stringPreferencesKey("homework_rewards_v1_$pid")
-    private fun rewardedKey(pid: String) = stringPreferencesKey("rewarded_v1_$pid")
+    private fun dailyLimitKey(pid: String) = stringPreferencesKey("hw_daily_limit_v1_$pid")
+    private fun dailyEarnedKey(pid: String) = stringPreferencesKey("hw_daily_earned_v1_$pid")
     private fun starProgressKey(pid: String) = stringPreferencesKey("star_progress_v1_$pid")
     private val pinKey = stringPreferencesKey("parent_pin_v1")
     private val musicVolumeKey = stringPreferencesKey("music_volume_v1")
@@ -146,29 +147,58 @@ class ProgressStore(private val context: Context) {
             val current = (prefs[key] ?: "").split(";").filter { it.isNotBlank() }.toMutableSet()
             if (assigned) current.add(deckId) else current.remove(deckId)
             prefs[key] = current.joinToString(";")
-            if (assigned) {
-                // Re-assigning homework starts a fresh earning cycle.
-                val rk = rewardedKey(pid)
-                val rewarded = (prefs[rk] ?: "").split(";").filter { it.isNotBlank() }.toMutableSet()
-                rewarded.remove(deckId)
-                prefs[rk] = rewarded.joinToString(";")
-            }
         }
     }
 
-    /** Homework activities already paid out this assignment cycle. Survives resets. */
-    val rewarded: Flow<Set<String>> = safeData.map { prefs ->
-        (prefs[rewardedKey(activePid(prefs))] ?: "")
-            .split(";").filter { it.isNotBlank() }.toSet()
+    /** Per-activity daily earn limit: -1 = endless, otherwise 1..5. Default handled by caller. */
+    val dailyLimits: Flow<Map<String, Int>> = safeData.map { prefs ->
+        (prefs[dailyLimitKey(activePid(prefs))] ?: "")
+            .split(";").mapNotNull { entry ->
+                val parts = entry.split(":")
+                val n = parts.getOrNull(1)?.toIntOrNull() ?: return@mapNotNull null
+                if (parts[0].isBlank()) null else parts[0] to n
+            }.toMap()
     }
 
-    suspend fun markRewarded(activityId: String) {
+    suspend fun setDailyLimit(activityId: String, limit: Int) {
         context.dataStore.edit { prefs ->
             val pid = activePid(prefs)
-            val key = rewardedKey(pid)
-            val current = (prefs[key] ?: "").split(";").filter { it.isNotBlank() }.toMutableSet()
-            current.add(activityId)
-            prefs[key] = current.joinToString(";")
+            val key = dailyLimitKey(pid)
+            val map = (prefs[key] ?: "").split(";").mapNotNull { entry ->
+                val parts = entry.split(":")
+                val n = parts.getOrNull(1)?.toIntOrNull() ?: return@mapNotNull null
+                if (parts[0].isBlank()) null else parts[0] to n
+            }.toMap().toMutableMap()
+            map[activityId] = if (limit < 0) -1 else limit.coerceIn(1, 5)
+            prefs[key] = map.entries.joinToString(";") { "${it.key}:${it.value}" }
+        }
+    }
+
+    /** How many times each activity paid out and on which epoch day: id -> (count, day). */
+    val dailyEarned: Flow<Map<String, Pair<Int, Long>>> = safeData.map { prefs ->
+        (prefs[dailyEarnedKey(activePid(prefs))] ?: "")
+            .split(";").mapNotNull { entry ->
+                val parts = entry.split(":")
+                val count = parts.getOrNull(1)?.toIntOrNull() ?: return@mapNotNull null
+                val day = parts.getOrNull(2)?.toLongOrNull() ?: return@mapNotNull null
+                if (parts[0].isBlank()) null else parts[0] to (count to day)
+            }.toMap()
+    }
+
+    suspend fun recordEarn(activityId: String, todayEpochDay: Long) {
+        context.dataStore.edit { prefs ->
+            val pid = activePid(prefs)
+            val key = dailyEarnedKey(pid)
+            val map = (prefs[key] ?: "").split(";").mapNotNull { entry ->
+                val parts = entry.split(":")
+                val count = parts.getOrNull(1)?.toIntOrNull() ?: return@mapNotNull null
+                val day = parts.getOrNull(2)?.toLongOrNull() ?: return@mapNotNull null
+                if (parts[0].isBlank()) null else parts[0] to (count to day)
+            }.toMap().toMutableMap()
+            val (count, day) = map[activityId] ?: (0 to todayEpochDay)
+            val newCount = if (day == todayEpochDay) count + 1 else 1
+            map[activityId] = newCount to todayEpochDay
+            prefs[key] = map.entries.joinToString(";") { "${it.key}:${it.value.first}:${it.value.second}" }
         }
     }
 

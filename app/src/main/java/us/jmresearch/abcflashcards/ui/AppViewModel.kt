@@ -53,11 +53,21 @@ data class AppState(
     val homeworkRewards: Map<String, Int> = emptyMap(),
     val musicVolume: Float = 0.4f,
     val sfxVolume: Float = 0.7f,
-    val rewarded: Set<String> = emptySet(),
     val activeAge: Int? = null,
+    val dailyLimits: Map<String, Int> = emptyMap(),
+    val earnedToday: Map<String, Int> = emptyMap(),
 )
 
 fun AppState.rewardFor(activityId: String): Int = homeworkRewards[activityId] ?: 1
+
+/** -1 = endless. Default: once per day. */
+fun AppState.limitFor(activityId: String): Int = dailyLimits[activityId] ?: 1
+
+fun AppState.canEarn(activityId: String): Boolean {
+    if (activityId !in homework) return false
+    val limit = limitFor(activityId)
+    return limit < 0 || (earnedToday[activityId] ?: 0) < limit
+}
 
 /** Special homework id for the writing/story activity (not a deck). */
 const val WRITING_HOMEWORK_ID = "writing"
@@ -71,7 +81,12 @@ private data class Core(
     val homeworkRewards: Map<String, Int>,
 )
 
-private data class Profs(val profiles: List<Profile>, val activeId: String, val rewarded: Set<String>)
+private data class Profs(
+    val profiles: List<Profile>,
+    val activeId: String,
+    val dailyLimits: Map<String, Int>,
+    val dailyEarned: Map<String, Pair<Int, Long>>,
+)
 
 private data class KidBits(
     val bank: Int,
@@ -95,7 +110,9 @@ class AppViewModel(private val store: ProgressStore) : ViewModel() {
                 store.forceUnlocked,
                 combine(store.homework, store.homeworkRewards) { h, r -> h to r },
             ) { (p, q), t, f, (h, r) -> Core(p, t, f, h, q, r) },
-            combine(store.profiles, store.activeProfileId, store.rewarded) { pr, id, rw -> Profs(pr, id, rw) },
+            combine(store.profiles, store.activeProfileId, store.dailyLimits, store.dailyEarned) { pr, id, lim, earned ->
+                Profs(pr, id, lim, earned)
+            },
             combine(store.starBank, store.starProgress, store.parentPin, store.musicVolume, store.sfxVolume) { b, s, pin, mv, sv ->
                 KidBits(b, s, pin, mv, sv)
             },
@@ -132,8 +149,11 @@ class AppViewModel(private val store: ProgressStore) : ViewModel() {
                 parentPin = kid.pin,
                 musicVolume = kid.musicVolume,
                 sfxVolume = kid.sfxVolume,
-                rewarded = profs.rewarded,
                 activeAge = age,
+                dailyLimits = profs.dailyLimits,
+                earnedToday = profs.dailyEarned.mapValues { (_, v) ->
+                    if (v.second == LocalDate.now().toEpochDay()) v.first else 0
+                },
                 homework = core.homework,
                 quizProgress = core.quizProgress,
                 homeworkRewards = core.homeworkRewards,
@@ -154,15 +174,7 @@ class AppViewModel(private val store: ProgressStore) : ViewModel() {
     val quizNonce: StateFlow<Int> = _quizNonce
 
     /** Story-in-progress lives here so tab switches and recompositions can't eat it. */
-    // TEMP TEST SEED — remove after validating the story reward flow.
-    private val _storySentences = MutableStateFlow<List<String>>(
-        listOf(
-            "The cat sat down.",
-            "A big dog ran fast.",
-            "I like red socks.",
-            "The sun is hot.",
-        ),
-    )
+    private val _storySentences = MutableStateFlow<List<String>>(emptyList())
     val storySentences: StateFlow<List<String>> = _storySentences
 
     private val _storyRewarded = MutableStateFlow(false)
@@ -242,14 +254,12 @@ class AppViewModel(private val store: ProgressStore) : ViewModel() {
     }
 
     /**
-     * Stars come ONLY from assigned homework that hasn't paid out this
-     * assignment cycle. The rewarded ledger survives resets, so
-     * reset-and-regrind earns nothing until a parent re-assigns.
+     * Stars come ONLY from assigned homework that still has earns left today.
+     * The earn counter survives resets and rolls over at midnight, so
+     * reset-and-regrind is capped at the parent-set daily limit.
      */
-    private fun earnsStars(activityId: String?): Boolean {
-        val s = state.value
-        return activityId != null && activityId in s.homework && activityId !in s.rewarded
-    }
+    private fun earnsStars(activityId: String?): Boolean =
+        activityId != null && state.value.canEarn(activityId)
 
     /** Quiz: correct tap. Advances quiz progress; stars only on unearned homework. */
     fun quizCorrect() {
@@ -270,7 +280,7 @@ class AppViewModel(private val store: ProgressStore) : ViewModel() {
             if (earns && cardUnmastered) store.recordKidCorrect(CORRECTS_PER_STAR)
             if (earns && completesDeck && deckId != null) {
                 store.addStars(s.rewardFor(deckId))
-                store.markRewarded(deckId)
+                store.recordEarn(deckId, today)
             }
             advance(lastShownId = card.id)
         }
@@ -357,13 +367,17 @@ class AppViewModel(private val store: ProgressStore) : ViewModel() {
         viewModelScope.launch { store.redeemStars(count) }
     }
 
-    /** Finishing a story pays the writing reward once per assignment cycle. */
+    /** Finishing a story pays the writing reward, up to the daily limit. */
     fun awardStoryStar() {
         if (!earnsStars(WRITING_HOMEWORK_ID)) return
         viewModelScope.launch {
             store.addStars(state.value.rewardFor(WRITING_HOMEWORK_ID))
-            store.markRewarded(WRITING_HOMEWORK_ID)
+            store.recordEarn(WRITING_HOMEWORK_ID, LocalDate.now().toEpochDay())
         }
+    }
+
+    fun setDailyLimit(activityId: String, limit: Int) {
+        viewModelScope.launch { store.setDailyLimit(activityId, limit) }
     }
 
     fun setBirthday(profileId: String, epochDay: Long?) {

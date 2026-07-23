@@ -221,44 +221,68 @@ class SoundBox {
 
     private var songIndex = 0
 
+    /** Observable so the sounds dialog tracks auto-advance. */
+    val currentSong = kotlinx.coroutines.flow.MutableStateFlow("")
+
     val currentSongName: String
         get() = songs[songIndex].name
 
     private fun renderSong(song: Chiptune): ShortArray {
-        fun lineSamples(line: List<Pair<Int?, Int>>): Int =
-            line.sumOf { it.second } * SAMPLE_RATE * song.unitMs / 1000
-        val total = maxOf(lineSamples(song.melody), lineSamples(song.bass))
+        val unitLen = SAMPLE_RATE * song.unitMs / 1000
+        val sectionLen = song.melody.sumOf { it.second } * unitLen
+        // ~2.5 minutes per song, built from varied sections rather than one loop.
+        val targetLen = SAMPLE_RATE * 150
+        val sections = maxOf(4, (targetLen + sectionLen - 1) / sectionLen)
+        val total = sections * sectionLen
         val out = ShortArray(total)
 
-        fun renderLine(line: List<Pair<Int?, Int>>, isBass: Boolean) {
+        // (melody transpose, whole-key transpose) per section: octave lifts and
+        // brief key changes keep it from feeling like one endless riff.
+        val variations = listOf(
+            0 to 0, 0 to 0, 12 to 0, 0 to 0,
+            0 to 5, 12 to 5, 0 to 0, 12 to 0,
+            0 to 7, 0 to 0, 12 to 0, 0 to 0,
+        )
+
+        fun renderLine(
+            line: List<Pair<Int?, Int>>,
+            isBass: Boolean,
+            offset: Int,
+            limit: Int,
+            transpose: Int,
+        ) {
             var pos = 0
-            // repeat the shorter line until it fills the track
-            while (pos < total) {
+            while (pos < limit) {
                 for ((semi, units) in line) {
-                    val len = units * SAMPLE_RATE * song.unitMs / 1000
+                    val len = units * unitLen
                     if (semi != null) {
-                        val freq = note(semi)
-                        val noteEnd = (pos + len).coerceAtMost(total)
+                        val freq = note(semi + transpose)
+                        val noteEnd = min(pos + len, limit)
                         for (i in pos until noteEnd) {
                             val t = (i - pos).toDouble() / len
                             val env = min(1.0, min(t * 30, (1 - t) * 6)).coerceAtLeast(0.0)
+                            val gi = offset + i
                             val sample = if (isBass) {
-                                triSample(freq, i) * 0.14
+                                triSample(freq, gi) * 0.14
                             } else {
-                                pulseSample(freq, i, song.duty) * 0.09
+                                pulseSample(freq, gi, song.duty) * 0.09
                             }
-                            val mixed = out[i] + (sample * env * Short.MAX_VALUE).toInt()
-                            out[i] = mixed.coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt()).toShort()
+                            val mixed = out[gi] + (sample * env * Short.MAX_VALUE).toInt()
+                            out[gi] = mixed.coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt()).toShort()
                         }
                     }
                     pos += len
-                    if (pos >= total) break
+                    if (pos >= limit) break
                 }
             }
         }
 
-        renderLine(song.melody, isBass = false)
-        renderLine(song.bass, isBass = true)
+        for (s in 0 until sections) {
+            val (melT, keyT) = variations[s % variations.size]
+            val offset = s * sectionLen
+            renderLine(song.melody, isBass = false, offset = offset, limit = sectionLen, transpose = melT + keyT)
+            renderLine(song.bass, isBass = true, offset = offset, limit = sectionLen, transpose = keyT)
+        }
 
         if (song.drums.isNotEmpty()) {
             val unitLen = SAMPLE_RATE * song.unitMs / 1000
@@ -307,6 +331,7 @@ class SoundBox {
 
     fun startMusic() {
         if (musicTrack != null) return
+        currentSong.value = songs[songIndex].name
         val pcm = renderSong(songs[songIndex])
         // Play once; the end-of-track marker advances to the next song.
         musicTrack = buildTrack(pcm, loop = false).also { track ->

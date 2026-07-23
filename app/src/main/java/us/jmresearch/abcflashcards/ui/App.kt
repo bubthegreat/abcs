@@ -299,7 +299,7 @@ private fun StarBar(state: AppState, onProfileTap: () -> Unit, onParentTap: () -
 /** Kid-accessible sound settings — deliberately outside the PIN gate. */
 @Composable
 private fun SoundDialog(vm: AppViewModel, state: AppState, sound: SoundBox, onDismiss: () -> Unit) {
-    var songName by remember { mutableStateOf(sound.currentSongName) }
+    val songName by sound.currentSong.collectAsState()
     AlertDialog(
         onDismissRequest = onDismiss,
         confirmButton = { TextButton(onClick = onDismiss) { Text("Done") } },
@@ -308,7 +308,7 @@ private fun SoundDialog(vm: AppViewModel, state: AppState, sound: SoundBox, onDi
             Column {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text("Music — $songName", fontSize = 16.sp, modifier = Modifier.weight(1f))
-                    TextButton(onClick = { songName = sound.nextSong() }) { Text("⏭ Next song") }
+                    TextButton(onClick = { sound.nextSong() }) { Text("⏭ Next song") }
                 }
                 Slider(
                     value = state.musicVolume,
@@ -882,6 +882,24 @@ private fun CelebrationScreen(deckTitle: String, onKeepPracticing: () -> Unit, o
     }
 }
 
+/** Daily earn limit: 1..5 or endless (-1). Plus past 5 wraps to ∞. */
+@Composable
+private fun LimitStepper(limit: Int, onChange: (Int) -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        TextButton(
+            onClick = { onChange(if (limit < 0) 5 else (limit - 1).coerceAtLeast(1)) },
+            enabled = limit < 0 || limit > 1,
+            modifier = Modifier.width(36.dp),
+        ) { Text("−", fontSize = 16.sp) }
+        Text(if (limit < 0) "∞/day" else "$limit/day", fontSize = 12.sp)
+        TextButton(
+            onClick = { onChange(if (limit >= 5 || limit < 0) -1 else limit + 1) },
+            enabled = limit >= 0,
+            modifier = Modifier.width(36.dp),
+        ) { Text("+", fontSize = 16.sp) }
+    }
+}
+
 @Composable
 private fun RewardStepper(count: Int, onChange: (Int) -> Unit) {
     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1276,13 +1294,16 @@ private fun ParentScreen(vm: AppViewModel, state: AppState, audio: AudioBox, onC
                                 onCheckedChange = { vm.toggleHomework(status.deck.id) },
                             )
                             if (assigned) {
-                                if (status.deck.id in state.rewarded) {
-                                    Text("✅ earned", fontSize = 12.sp, color = Color(0xFF43A047))
-                                } else {
-                                    RewardStepper(
-                                        count = state.rewardFor(status.deck.id),
-                                        onChange = { vm.setHomeworkReward(status.deck.id, it) },
-                                    )
+                                RewardStepper(
+                                    count = state.rewardFor(status.deck.id),
+                                    onChange = { vm.setHomeworkReward(status.deck.id, it) },
+                                )
+                                LimitStepper(
+                                    limit = state.limitFor(status.deck.id),
+                                    onChange = { vm.setDailyLimit(status.deck.id, it) },
+                                )
+                                if (!state.canEarn(status.deck.id)) {
+                                    Text("✅ done today", fontSize = 12.sp, color = Color(0xFF43A047))
                                 }
                             }
                         }
@@ -1304,7 +1325,6 @@ private fun ParentScreen(vm: AppViewModel, state: AppState, audio: AudioBox, onC
                     ) {
                         Column(Modifier.weight(1f)) {
                             Text("✍️ Writing stories", fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
-                            Text("5-sentence story = reward", fontSize = 13.sp, color = Color.Gray)
                         }
                         val assigned = WRITING_HOMEWORK_ID in state.homework
                         Column(
@@ -1316,20 +1336,23 @@ private fun ParentScreen(vm: AppViewModel, state: AppState, audio: AudioBox, onC
                                 onCheckedChange = { vm.toggleHomework(WRITING_HOMEWORK_ID) },
                             )
                             if (assigned) {
-                                if (WRITING_HOMEWORK_ID in state.rewarded) {
-                                    Text("✅ earned", fontSize = 12.sp, color = Color(0xFF43A047))
-                                } else {
-                                    RewardStepper(
-                                        count = state.rewardFor(WRITING_HOMEWORK_ID),
-                                        onChange = { vm.setHomeworkReward(WRITING_HOMEWORK_ID, it) },
-                                    )
+                                RewardStepper(
+                                    count = state.rewardFor(WRITING_HOMEWORK_ID),
+                                    onChange = { vm.setHomeworkReward(WRITING_HOMEWORK_ID, it) },
+                                )
+                                LimitStepper(
+                                    limit = state.limitFor(WRITING_HOMEWORK_ID),
+                                    onChange = { vm.setDailyLimit(WRITING_HOMEWORK_ID, it) },
+                                )
+                                if (!state.canEarn(WRITING_HOMEWORK_ID)) {
+                                    Text("✅ done today", fontSize = 12.sp, color = Color(0xFF43A047))
                                 }
                             }
                         }
                         Spacer(Modifier.width(90.dp))
                     }
                     Text(
-                        "Stars pay once per assignment. ✅ earned = paid; flip homework off and on to assign it again.",
+                        "Rewards reset daily. The /day limit caps how many times each homework can pay per day.",
                         fontSize = 13.sp,
                         color = Color.Gray,
                     )
