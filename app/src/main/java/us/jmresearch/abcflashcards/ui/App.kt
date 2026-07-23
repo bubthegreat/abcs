@@ -1305,7 +1305,9 @@ private fun ParentScreen(vm: AppViewModel, state: AppState, audio: AudioBox, onC
                     }
                     Row(modifier = Modifier.fillMaxWidth()) {
                         Spacer(Modifier.weight(1f))
-                        Text("Homework", fontSize = 13.sp, color = Color.Gray, textAlign = TextAlign.Center, modifier = Modifier.width(100.dp))
+                        Text("Stars", fontSize = 13.sp, color = Color.Gray, textAlign = TextAlign.Center, modifier = Modifier.width(110.dp))
+                        Text("Repeats", fontSize = 13.sp, color = Color.Gray, textAlign = TextAlign.Center, modifier = Modifier.width(110.dp))
+                        Text("Homework", fontSize = 13.sp, color = Color.Gray, textAlign = TextAlign.Center, modifier = Modifier.width(80.dp))
                         Text("Lock", fontSize = 13.sp, color = Color.Gray, textAlign = TextAlign.Center, modifier = Modifier.width(90.dp))
                     }
                 }
@@ -1314,37 +1316,38 @@ private fun ParentScreen(vm: AppViewModel, state: AppState, audio: AudioBox, onC
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
                     ) {
+                        val assigned = status.deck.id in state.homework
                         Column(Modifier.weight(1f)) {
                             Text(status.deck.title, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
                             Text(
                                 "🃏 ${status.masteredCount}/${status.total}  🎯 ${status.quizMasteredCount}/${status.total}" +
-                                    if (!status.unlocked) " · locked" else "",
+                                    (if (!status.unlocked) " · locked" else "") +
+                                    (if (assigned && !state.canEarn(status.deck.id)) " · ✅ done today" else ""),
                                 fontSize = 13.sp,
                                 color = Color.Gray,
                             )
                         }
-                        val assigned = status.deck.id in state.homework
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            modifier = Modifier.width(100.dp),
-                        ) {
-                            Switch(
-                                checked = assigned,
-                                onCheckedChange = { vm.toggleHomework(status.deck.id) },
-                            )
+                        Box(modifier = Modifier.width(110.dp), contentAlignment = Alignment.Center) {
                             if (assigned) {
                                 RewardStepper(
                                     count = state.rewardFor(status.deck.id),
                                     onChange = { vm.setHomeworkReward(status.deck.id, it) },
                                 )
+                            }
+                        }
+                        Box(modifier = Modifier.width(110.dp), contentAlignment = Alignment.Center) {
+                            if (assigned) {
                                 LimitStepper(
                                     limit = state.limitFor(status.deck.id),
                                     onChange = { vm.setDailyLimit(status.deck.id, it) },
                                 )
-                                if (!state.canEarn(status.deck.id)) {
-                                    Text("✅ done today", fontSize = 12.sp, color = Color(0xFF43A047))
-                                }
                             }
+                        }
+                        Box(modifier = Modifier.width(80.dp), contentAlignment = Alignment.Center) {
+                            Switch(
+                                checked = assigned,
+                                onCheckedChange = { vm.toggleHomework(status.deck.id) },
+                            )
                         }
                         Box(modifier = Modifier.width(90.dp), contentAlignment = Alignment.Center) {
                             when {
@@ -1362,31 +1365,34 @@ private fun ParentScreen(vm: AppViewModel, state: AppState, audio: AudioBox, onC
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
                     ) {
+                        val assigned = WRITING_HOMEWORK_ID in state.homework
                         Column(Modifier.weight(1f)) {
                             Text("✍️ Writing stories", fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                            if (assigned && !state.canEarn(WRITING_HOMEWORK_ID)) {
+                                Text("✅ done today", fontSize = 13.sp, color = Color.Gray)
+                            }
                         }
-                        val assigned = WRITING_HOMEWORK_ID in state.homework
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            modifier = Modifier.width(100.dp),
-                        ) {
-                            Switch(
-                                checked = assigned,
-                                onCheckedChange = { vm.toggleHomework(WRITING_HOMEWORK_ID) },
-                            )
+                        Box(modifier = Modifier.width(110.dp), contentAlignment = Alignment.Center) {
                             if (assigned) {
                                 RewardStepper(
                                     count = state.rewardFor(WRITING_HOMEWORK_ID),
                                     onChange = { vm.setHomeworkReward(WRITING_HOMEWORK_ID, it) },
                                 )
+                            }
+                        }
+                        Box(modifier = Modifier.width(110.dp), contentAlignment = Alignment.Center) {
+                            if (assigned) {
                                 LimitStepper(
                                     limit = state.limitFor(WRITING_HOMEWORK_ID),
                                     onChange = { vm.setDailyLimit(WRITING_HOMEWORK_ID, it) },
                                 )
-                                if (!state.canEarn(WRITING_HOMEWORK_ID)) {
-                                    Text("✅ done today", fontSize = 12.sp, color = Color(0xFF43A047))
-                                }
                             }
+                        }
+                        Box(modifier = Modifier.width(80.dp), contentAlignment = Alignment.Center) {
+                            Switch(
+                                checked = assigned,
+                                onCheckedChange = { vm.toggleHomework(WRITING_HOMEWORK_ID) },
+                            )
                         }
                         Spacer(Modifier.width(90.dp))
                     }
