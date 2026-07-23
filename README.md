@@ -23,20 +23,32 @@ make release-apk  # unsigned release APK
 make clean
 ```
 
-## Install onto a tablet
+## Install onto a tablet (fully containerized, no adb on your machine)
+
+Uses wireless adb from inside the build container — tablet and computer
+must be on the same WiFi.
 
 1. On the tablet: Settings → About → tap **Build number** 7 times, then
-   Developer options → enable **USB debugging**.
-2. Plug it in over USB (use a data cable) and accept the
-   "Allow USB debugging" prompt (check *Always allow*).
-3. Run:
+   Developer options → enable **Wireless debugging**.
+2. One-time pairing: open Wireless debugging → **Pair device with
+   pairing code**. It shows an IP:PORT and a 6-digit code:
 
 ```sh
-make install
+make pair DEVICE=192.168.1.42:37123 CODE=123456
 ```
 
-That builds the APK in Docker and installs/updates it on the connected
-device. Existing progress on the tablet is preserved.
+3. Install (every time): the main Wireless debugging screen shows a
+   different IP:PORT — use that one:
+
+```sh
+make install DEVICE=192.168.1.42:41234
+```
+
+Existing progress on the tablet is preserved across installs.
+
+USB fallback (the one path that needs host platform-tools, since Docker
+Desktop on Windows can't pass USB through): enable USB debugging, plug
+in a data cable, and run `make install-usb`.
 
 ## Releases
 
