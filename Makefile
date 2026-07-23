@@ -14,6 +14,10 @@ DOCKER_RUN := MSYS_NO_PATHCONV=1 docker run --rm \
 
 REPO := bubthegreat/abcs
 
+# Use adb from PATH when present; otherwise fall back to the default
+# Android SDK location (where Android Studio puts platform-tools).
+ADB := $(shell command -v adb 2>/dev/null || echo "$(LOCALAPPDATA)/Android/Sdk/platform-tools/adb.exe")
+
 .PHONY: apk release-apk test clean install install-latest help
 
 help:
@@ -53,7 +57,7 @@ pair:
 # Default install: USB cable via host adb (Docker Desktop on Windows
 # cannot pass USB through, so this is the one host-adb step).
 install: apk
-	adb install -r app/build/outputs/apk/debug/app-debug.apk
+	"$(ADB)" install -r app/build/outputs/apk/debug/app-debug.apk
 	@echo "Installed. Find 'Let's Learn' in the app drawer."
 
 # Skip building entirely: grab the newest CI release APK and install it.
@@ -63,7 +67,7 @@ install-latest:
 		| grep -o 'https[^"]*' \
 		| head -1 \
 		| xargs curl -L -o .latest.apk
-	adb install -r .latest.apk
+	"$(ADB)" install -r .latest.apk
 	@echo "Installed latest release. Find 'Let's Learn' in the app drawer."
 
 # Fully containerized alternative over Wireless debugging.
