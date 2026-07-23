@@ -52,6 +52,17 @@ class AudioBox(private val context: Context) {
         }
     }
 
+    /** Read a finished story: each sentence in order with a short pause between. */
+    fun speakStory(sentences: List<String>) {
+        if (!ttsReady) return
+        stopPlayback()
+        tts?.speak("", TextToSpeech.QUEUE_FLUSH, null, "story_start")
+        sentences.forEachIndexed { i, sentence ->
+            tts?.speak(sentence, TextToSpeech.QUEUE_ADD, null, "story_$i")
+            tts?.playSilentUtterance(700, TextToSpeech.QUEUE_ADD, "story_pause_$i")
+        }
+    }
+
     fun startRecording(itemId: String): Boolean {
         stopRecording()
         stopPlayback()

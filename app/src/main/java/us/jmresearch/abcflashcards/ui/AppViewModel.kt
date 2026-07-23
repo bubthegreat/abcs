@@ -247,6 +247,11 @@ class AppViewModel(private val store: ProgressStore) : ViewModel() {
         viewModelScope.launch { store.redeemStars(count) }
     }
 
+    /** Finishing a 5-sentence story in kid mode earns a star. */
+    fun awardStoryStar() {
+        viewModelScope.launch { store.addStars(1) }
+    }
+
     companion object {
         fun factory(context: Context): ViewModelProvider.Factory = viewModelFactory {
             initializer { AppViewModel(ProgressStore(context.applicationContext)) }

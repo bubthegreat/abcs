@@ -56,22 +56,23 @@ private val subjectColors = mapOf(
     Subject.MATH to Color(0xFF42A5F5),
 )
 
-private data class TabSpec(val subject: Subject, val title: String, val emoji: String)
+private data class TabSpec(val subject: Subject?, val title: String, val emoji: String)
 
 private val tabs = listOf(
     TabSpec(Subject.LETTERS, "Letters", "🔤"),
     TabSpec(Subject.WORDS, "Words", "📖"),
     TabSpec(Subject.PHRASES, "Phrases", "💬"),
     TabSpec(Subject.MATH, "Math", "🔢"),
+    TabSpec(null, "Writing", "✍️"),
 )
 
 @Composable
-fun App(vm: AppViewModel, audio: AudioBox) {
+fun App(vm: AppViewModel, audio: AudioBox, ink: InkBox) {
     val state by vm.state.collectAsState()
     var screen by remember { mutableStateOf("home") } // "home" | "deck" | "parent"
 
     if (state.kidMode) {
-        KidMode(vm = vm, state = state, audio = audio)
+        KidMode(vm = vm, state = state, audio = audio, ink = ink)
         return
     }
 
@@ -79,6 +80,8 @@ fun App(vm: AppViewModel, audio: AudioBox) {
         "home" -> HomeScreen(
             vm = vm,
             state = state,
+            audio = audio,
+            ink = ink,
             onDeckTap = { deckId -> vm.openDeck(deckId); screen = "deck" },
             onParentOpen = { screen = "parent" },
         )
@@ -94,7 +97,7 @@ fun App(vm: AppViewModel, audio: AudioBox) {
 }
 
 @Composable
-private fun KidMode(vm: AppViewModel, state: AppState, audio: AudioBox) {
+private fun KidMode(vm: AppViewModel, state: AppState, audio: AudioBox, ink: InkBox) {
     val openDeckId by vm.openDeckId.collectAsState()
     var showExitDialog by remember { mutableStateOf(false) }
 
@@ -114,6 +117,8 @@ private fun KidMode(vm: AppViewModel, state: AppState, audio: AudioBox) {
         KidHome(
             vm = vm,
             state = state,
+            audio = audio,
+            ink = ink,
             onDeckTap = { vm.openDeck(it) },
             onExitTap = { showExitDialog = true },
         )
@@ -193,7 +198,14 @@ private fun StarBar(state: AppState, onExitTap: (() -> Unit)? = null) {
 }
 
 @Composable
-private fun KidHome(vm: AppViewModel, state: AppState, onDeckTap: (String) -> Unit, onExitTap: () -> Unit) {
+private fun KidHome(
+    vm: AppViewModel,
+    state: AppState,
+    audio: AudioBox,
+    ink: InkBox,
+    onDeckTap: (String) -> Unit,
+    onExitTap: () -> Unit,
+) {
     var tab by remember { mutableStateOf(0) }
     Scaffold(
         bottomBar = {
@@ -212,15 +224,20 @@ private fun KidHome(vm: AppViewModel, state: AppState, onDeckTap: (String) -> Un
         Column(modifier = Modifier.fillMaxSize().padding(padding)) {
             StarBar(state, onExitTap)
             val spec = tabs[tab]
-            val decks = state.deckStatuses.filter { it.deck.subject == spec.subject }
-            LazyVerticalGrid(
-                columns = GridCells.Fixed(2),
-                modifier = Modifier.fillMaxSize().padding(horizontal = 12.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                items(decks, key = { it.deck.id }) { status ->
-                    DeckTile(status, subjectColors.getValue(spec.subject), onDeckTap)
+            val subject = spec.subject
+            if (subject == null) {
+                WritingScreen(audio = audio, ink = ink, onStoryFinished = { vm.awardStoryStar() })
+            } else {
+                val decks = state.deckStatuses.filter { it.deck.subject == subject }
+                LazyVerticalGrid(
+                    columns = GridCells.Fixed(2),
+                    modifier = Modifier.fillMaxSize().padding(horizontal = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    items(decks, key = { it.deck.id }) { status ->
+                        DeckTile(status, subjectColors.getValue(subject), onDeckTap)
+                    }
                 }
             }
         }
@@ -344,6 +361,8 @@ private fun QuizScreen(vm: AppViewModel, state: AppState, audio: AudioBox, onClo
 private fun HomeScreen(
     vm: AppViewModel,
     state: AppState,
+    audio: AudioBox,
+    ink: InkBox,
     onDeckTap: (String) -> Unit,
     onParentOpen: () -> Unit,
 ) {
@@ -399,15 +418,20 @@ private fun HomeScreen(
                 TextButton(onClick = onParentOpen) { Text("⚙️", fontSize = 22.sp) }
             }
             val spec = tabs[tab]
-            val decks = state.deckStatuses.filter { it.deck.subject == spec.subject }
-            LazyVerticalGrid(
-                columns = GridCells.Fixed(2),
-                modifier = Modifier.fillMaxSize().padding(horizontal = 12.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                items(decks, key = { it.deck.id }) { status ->
-                    DeckTile(status, subjectColors.getValue(spec.subject), onDeckTap)
+            val subject = spec.subject
+            if (subject == null) {
+                WritingScreen(audio = audio, ink = ink, onStoryFinished = {})
+            } else {
+                val decks = state.deckStatuses.filter { it.deck.subject == subject }
+                LazyVerticalGrid(
+                    columns = GridCells.Fixed(2),
+                    modifier = Modifier.fillMaxSize().padding(horizontal = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    items(decks, key = { it.deck.id }) { status ->
+                        DeckTile(status, subjectColors.getValue(subject), onDeckTap)
+                    }
                 }
             }
         }
