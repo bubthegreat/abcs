@@ -8,6 +8,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -91,7 +92,7 @@ private fun Modifier.rainbowRing(cornerRadius: androidx.compose.ui.unit.Dp, stro
                 ),
             )
         }
-        androidx.compose.ui.graphics.drawscope.clipPath(ring) {
+        clipPath(ring) {
             rotate(angle) {
                 val big = maxOf(size.width, size.height) * 2f
                 drawRect(
