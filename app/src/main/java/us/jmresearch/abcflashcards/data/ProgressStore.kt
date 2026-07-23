@@ -33,6 +33,8 @@ class ProgressStore(private val context: Context) {
     private fun homeworkRewardsKey(pid: String) = stringPreferencesKey("homework_rewards_v1_$pid")
     private fun starProgressKey(pid: String) = stringPreferencesKey("star_progress_v1_$pid")
     private val pinKey = stringPreferencesKey("parent_pin_v1")
+    private val musicVolumeKey = stringPreferencesKey("music_volume_v1")
+    private val sfxVolumeKey = stringPreferencesKey("sfx_volume_v1")
     private val kidModeKey = stringPreferencesKey("kid_mode_v1")
 
     private val safeData: Flow<Preferences> = context.dataStore.data
@@ -179,6 +181,18 @@ class ProgressStore(private val context: Context) {
     }
 
     val parentPin: Flow<String?> = safeData.map { it[pinKey] }
+
+    /** Device-wide, kid-adjustable. Defaults: music halfway, effects louder. */
+    val musicVolume: Flow<Float> = safeData.map { it[musicVolumeKey]?.toFloatOrNull() ?: 0.4f }
+    val sfxVolume: Flow<Float> = safeData.map { it[sfxVolumeKey]?.toFloatOrNull() ?: 0.7f }
+
+    suspend fun setMusicVolume(volume: Float) {
+        context.dataStore.edit { it[musicVolumeKey] = volume.coerceIn(0f, 1f).toString() }
+    }
+
+    suspend fun setSfxVolume(volume: Float) {
+        context.dataStore.edit { it[sfxVolumeKey] = volume.coerceIn(0f, 1f).toString() }
+    }
 
     val kidMode: Flow<Boolean> = safeData.map { it[kidModeKey] == "on" }
 

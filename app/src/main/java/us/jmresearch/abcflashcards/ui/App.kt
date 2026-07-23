@@ -63,6 +63,7 @@ private val subjectColors = mapOf(
     Subject.LETTERS to Color(0xFF7E57C2),
     Subject.WORDS to Color(0xFF26A69A),
     Subject.PHRASES to Color(0xFFEF6C00),
+    Subject.LANGUAGE to Color(0xFF5C6BC0),
     Subject.MATH to Color(0xFF42A5F5),
 )
 
@@ -126,23 +127,34 @@ private val tabs = listOf(
     TabSpec(Subject.LETTERS, "Letters", "🔤"),
     TabSpec(Subject.WORDS, "Words", "📖"),
     TabSpec(Subject.PHRASES, "Phrases", "💬"),
+    TabSpec(Subject.LANGUAGE, "Language", "📚"),
     TabSpec(Subject.MATH, "Math", "🔢"),
     TabSpec(null, "Writing", "✍️"),
 )
 
 @Composable
-fun App(vm: AppViewModel, audio: AudioBox, ink: InkBox) {
+fun App(vm: AppViewModel, audio: AudioBox, ink: InkBox, sound: SoundBox) {
     val state by vm.state.collectAsState()
+
+    // Music starts once; both volumes track the kid-adjustable settings live.
+    androidx.compose.runtime.LaunchedEffect(Unit) { sound.startMusic() }
+    androidx.compose.runtime.LaunchedEffect(state.musicVolume) { sound.setMusicVolume(state.musicVolume) }
+    androidx.compose.runtime.LaunchedEffect(state.sfxVolume) { sound.setSfxVolume(state.sfxVolume) }
     var screen by remember { mutableStateOf("home") } // "home" | "cards" | "quiz" | "parent"
     var showStarBurst by remember { mutableStateOf(false) }
     var burstAmount by remember { mutableStateOf(1) }
     var lastBank by remember { mutableStateOf(-1) }
 
     // Star celebration whenever the bank grows, whatever screen we're on.
+    // Baseline updates FIRST: if this effect restarts mid-celebration, the next
+    // burst must show only the new delta, not the accumulated one.
     androidx.compose.runtime.LaunchedEffect(state.starBank) {
-        if (lastBank >= 0 && state.starBank > lastBank) {
-            burstAmount = state.starBank - lastBank
+        val previous = lastBank
+        lastBank = state.starBank
+        if (previous >= 0 && state.starBank > previous) {
+            burstAmount = state.starBank - previous
             showStarBurst = true
+            sound.fanfare()
             audio.play(
                 "star_earned",
                 if (burstAmount == 1) "You earned a star!" else "You earned $burstAmount stars!",
@@ -150,7 +162,6 @@ fun App(vm: AppViewModel, audio: AudioBox, ink: InkBox) {
             kotlinx.coroutines.delay(2200)
             showStarBurst = false
         }
-        lastBank = state.starBank
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -172,7 +183,7 @@ fun App(vm: AppViewModel, audio: AudioBox, ink: InkBox) {
             }
             "quiz" -> {
                 BackHandler { vm.closeDeck(); screen = "home" }
-                QuizScreen(vm = vm, state = state, audio = audio, onClose = { vm.closeDeck(); screen = "home" })
+                QuizScreen(vm = vm, state = state, audio = audio, sound = sound, onClose = { vm.closeDeck(); screen = "home" })
             }
             "parent" -> {
                 BackHandler { screen = "home" }
@@ -255,7 +266,7 @@ private fun SetPinDialog(onSet: (String) -> Unit, onDismiss: () -> Unit) {
 }
 
 @Composable
-private fun StarBar(state: AppState, onProfileTap: () -> Unit, onParentTap: () -> Unit) {
+private fun StarBar(state: AppState, onProfileTap: () -> Unit, onParentTap: () -> Unit, onSoundTap: () -> Unit) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
@@ -273,13 +284,42 @@ private fun StarBar(state: AppState, onProfileTap: () -> Unit, onParentTap: () -
             modifier = Modifier.weight(1f).height(10.dp),
         )
         Spacer(Modifier.padding(horizontal = 8.dp))
-        Text("${state.starProgress}/$CORRECTS_PER_STAR", fontSize = 14.sp, color = Color.Gray)
+        Text(
+            "${state.starProgress}/$CORRECTS_PER_STAR answers to next ⭐",
+            fontSize = 13.sp,
+            color = Color.Gray,
+        )
+        TextButton(onClick = onSoundTap) { Text("🎵", fontSize = 22.sp) }
         TextButton(onClick = onParentTap) { Text("⚙️", fontSize = 22.sp) }
     }
 }
 
+/** Kid-accessible sound settings — deliberately outside the PIN gate. */
 @Composable
-private fun QuizScreen(vm: AppViewModel, state: AppState, audio: AudioBox, onClose: () -> Unit) {
+private fun SoundDialog(vm: AppViewModel, state: AppState, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Done") } },
+        title = { Text("🎵 Sounds") },
+        text = {
+            Column {
+                Text("Music", fontSize = 16.sp)
+                Slider(
+                    value = state.musicVolume,
+                    onValueChange = { vm.setMusicVolume(it) },
+                )
+                Text("Sound effects", fontSize = 16.sp)
+                Slider(
+                    value = state.sfxVolume,
+                    onValueChange = { vm.setSfxVolume(it) },
+                )
+            }
+        },
+    )
+}
+
+@Composable
+private fun QuizScreen(vm: AppViewModel, state: AppState, audio: AudioBox, sound: SoundBox, onClose: () -> Unit) {
     val quiz by vm.currentQuiz.collectAsState()
     val openDeckId by vm.openDeckId.collectAsState()
     val reviewMode by vm.reviewMode.collectAsState()
@@ -381,9 +421,11 @@ private fun QuizScreen(vm: AppViewModel, state: AppState, audio: AudioBox, onClo
                             if (wrongPicked != null) return@Button
                             if (isAnswer) {
                                 flashCorrect = true
+                                sound.correct()
                                 audio.play("praise", listOf("Great job!", "You got it!", "Awesome!").random())
                             } else {
                                 wrongPicked = choice
+                                sound.wrong()
                                 audio.play("reveal", "The answer is ${q.answer}")
                             }
                         },
@@ -437,7 +479,12 @@ private fun HomeScreen(
     var showProfiles by remember { mutableStateOf(false) }
     var showSetPin by remember { mutableStateOf(false) }
     var showParentPin by remember { mutableStateOf(false) }
+    var showSound by remember { mutableStateOf(false) }
     var chooseDeck by remember { mutableStateOf<DeckStatus?>(null) }
+
+    if (showSound) {
+        SoundDialog(vm, state, onDismiss = { showSound = false })
+    }
 
     chooseDeck?.let { chosen ->
         AlertDialog(
@@ -544,6 +591,7 @@ private fun HomeScreen(
                 state = state,
                 onProfileTap = { showProfiles = true },
                 onParentTap = { if (state.parentPin == null) showSetPin = true else showParentPin = true },
+                onSoundTap = { showSound = true },
             )
             val spec = tabs[tab]
             val subject = spec.subject

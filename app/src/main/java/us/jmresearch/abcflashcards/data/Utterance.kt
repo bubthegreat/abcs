@@ -43,7 +43,7 @@ val letterRecordingPrompts: Map<Char, String> = mapOf(
 fun utteranceFor(item: CardItem, deck: Deck): String = when (deck.subject) {
     Subject.COLORS -> item.id.substringAfter("_").replace("_", " ")
     Subject.LETTERS -> item.id.substringAfterLast("_").uppercase()
-    Subject.WORDS, Subject.PHRASES -> item.front
+    Subject.WORDS, Subject.PHRASES, Subject.LANGUAGE -> item.front
     Subject.MATH -> when (deck.id) {
         "counting" -> "Count the dots!"
         else -> item.front

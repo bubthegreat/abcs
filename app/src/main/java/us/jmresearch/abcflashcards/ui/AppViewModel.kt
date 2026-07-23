@@ -51,6 +51,8 @@ data class AppState(
     val homework: Set<String> = emptySet(),
     val quizProgress: Map<String, ItemProgress> = emptyMap(),
     val homeworkRewards: Map<String, Int> = emptyMap(),
+    val musicVolume: Float = 0.4f,
+    val sfxVolume: Float = 0.7f,
 )
 
 fun AppState.rewardFor(activityId: String): Int = homeworkRewards[activityId] ?: 1
@@ -72,8 +74,9 @@ private data class Profs(val profiles: List<Profile>, val activeId: String)
 private data class KidBits(
     val bank: Int,
     val starProgress: Int,
-    val kidMode: Boolean,
     val pin: String?,
+    val musicVolume: Float,
+    val sfxVolume: Float,
 )
 
 const val CORRECTS_PER_STAR = 10
@@ -91,8 +94,8 @@ class AppViewModel(private val store: ProgressStore) : ViewModel() {
                 combine(store.homework, store.homeworkRewards) { h, r -> h to r },
             ) { (p, q), t, f, (h, r) -> Core(p, t, f, h, q, r) },
             combine(store.profiles, store.activeProfileId) { pr, id -> Profs(pr, id) },
-            combine(store.starBank, store.starProgress, store.kidMode, store.parentPin) { b, s, k, pin ->
-                KidBits(b, s, k, pin)
+            combine(store.starBank, store.starProgress, store.parentPin, store.musicVolume, store.sfxVolume) { b, s, pin, mv, sv ->
+                KidBits(b, s, pin, mv, sv)
             },
         ) { core, profs, kid ->
             val statuses = Curriculum.decks.map { deck ->
@@ -114,8 +117,9 @@ class AppViewModel(private val store: ProgressStore) : ViewModel() {
                 activeProfileId = profs.activeId,
                 starBank = kid.bank,
                 starProgress = kid.starProgress,
-                kidMode = kid.kidMode,
                 parentPin = kid.pin,
+                musicVolume = kid.musicVolume,
+                sfxVolume = kid.sfxVolume,
                 homework = core.homework,
                 quizProgress = core.quizProgress,
                 homeworkRewards = core.homeworkRewards,
@@ -136,7 +140,15 @@ class AppViewModel(private val store: ProgressStore) : ViewModel() {
     val quizNonce: StateFlow<Int> = _quizNonce
 
     /** Story-in-progress lives here so tab switches and recompositions can't eat it. */
-    private val _storySentences = MutableStateFlow<List<String>>(emptyList())
+    // TEMP TEST SEED — remove after validating the story reward flow.
+    private val _storySentences = MutableStateFlow<List<String>>(
+        listOf(
+            "The cat sat down.",
+            "A big dog ran fast.",
+            "I like red socks.",
+            "The sun is hot.",
+        ),
+    )
     val storySentences: StateFlow<List<String>> = _storySentences
 
     private val _storyRewarded = MutableStateFlow(false)
@@ -289,6 +301,14 @@ class AppViewModel(private val store: ProgressStore) : ViewModel() {
 
     fun setPin(pin: String) {
         viewModelScope.launch { store.setPin(pin) }
+    }
+
+    fun setMusicVolume(volume: Float) {
+        viewModelScope.launch { store.setMusicVolume(volume) }
+    }
+
+    fun setSfxVolume(volume: Float) {
+        viewModelScope.launch { store.setSfxVolume(volume) }
     }
 
     fun redeemStars(count: Int) {

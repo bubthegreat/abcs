@@ -131,6 +131,105 @@ object Curriculum {
             prefix = "phrase",
         ))
 
+        // Language — vocabulary by grade, grammar through 2nd grade
+        fun vocabDeck(id: String, title: String, pairs: List<Pair<String, String>>, rule: UnlockRule) = Deck(
+            id = id, title = title, subject = Subject.LANGUAGE,
+            items = pairs.map { (word, meaning) -> CardItem("${id}_$word", word, meaning) },
+            unlockRule = rule,
+        )
+        add(vocabDeck(
+            "vocab_prek", "Words Pre-K",
+            listOf(
+                "big" to "very large", "small" to "very little", "happy" to "feeling good",
+                "sad" to "feeling bad", "hot" to "very warm", "cold" to "not warm at all",
+                "fast" to "moves quickly", "slow" to "takes a long time",
+                "loud" to "makes lots of noise", "quiet" to "makes little noise",
+            ),
+            UnlockRule.None,
+        ))
+        add(vocabDeck(
+            "vocab_k", "Words K",
+            listOf(
+                "same" to "just like another", "different" to "not like another",
+                "first" to "before all others", "last" to "after all others",
+                "above" to "higher up", "below" to "lower down",
+                "empty" to "nothing inside", "full" to "no room left",
+                "open" to "not shut", "closed" to "shut tight",
+            ),
+            UnlockRule.DecksMastered(listOf("vocab_prek")),
+        ))
+        add(vocabDeck(
+            "vocab_1", "Words 1st Grade",
+            listOf(
+                "always" to "every single time", "never" to "not one time",
+                "early" to "before the usual time", "late" to "after the usual time",
+                "easy" to "not hard to do", "difficult" to "hard to do",
+                "begin" to "to start", "finish" to "to end",
+                "near" to "close by", "far" to "a long way away",
+            ),
+            UnlockRule.DecksMastered(listOf("vocab_k")),
+        ))
+        add(vocabDeck(
+            "vocab_2", "Words 2nd Grade",
+            listOf(
+                "brave" to "not afraid", "curious" to "wants to know more",
+                "enormous" to "very very big", "tiny" to "very very small",
+                "exhausted" to "very tired", "delicious" to "tastes very good",
+                "fragile" to "breaks easily", "ancient" to "very very old",
+                "rapid" to "very fast", "silent" to "no sound at all",
+                "furious" to "very angry", "gentle" to "soft and careful",
+            ),
+            UnlockRule.DecksMastered(listOf("vocab_1")),
+        ))
+        add(Deck(
+            id = "grammar_1", title = "Nouns & Verbs", subject = Subject.LANGUAGE,
+            items = listOf(
+                CardItem("grammar_1_dog", "Pick the noun: The dog ran home.", "dog"),
+                CardItem("grammar_1_ball", "Pick the noun: Sam threw the ball.", "ball"),
+                CardItem("grammar_1_cake", "Pick the noun: We ate the cake.", "cake"),
+                CardItem("grammar_1_bird", "Pick the noun: A bird sang loudly.", "bird"),
+                CardItem("grammar_1_truck", "Pick the noun: The truck is red.", "truck"),
+                CardItem("grammar_1_sleeps", "Pick the verb: The cat sleeps all day.", "sleeps"),
+                CardItem("grammar_1_jumped", "Pick the verb: The frog jumped high.", "jumped"),
+                CardItem("grammar_1_eats", "Pick the verb: My sister eats apples.", "eats"),
+                CardItem("grammar_1_runs", "Pick the verb: Dad runs every morning.", "runs"),
+                CardItem("grammar_1_swims", "Pick the verb: The fish swims fast.", "swims"),
+            ),
+            unlockRule = UnlockRule.None,
+        ))
+        add(Deck(
+            id = "grammar_2", title = "Plurals & Pronouns", subject = Subject.LANGUAGE,
+            items = listOf(
+                CardItem("grammar_2_cats", "One cat, two ___", "cats"),
+                CardItem("grammar_2_dogs", "One dog, two ___", "dogs"),
+                CardItem("grammar_2_boxes", "One box, two ___", "boxes"),
+                CardItem("grammar_2_buses", "One bus, two ___", "buses"),
+                CardItem("grammar_2_babies", "One baby, two ___", "babies"),
+                CardItem("grammar_2_feet", "One foot, two ___", "feet"),
+                CardItem("grammar_2_he", "Sam is a boy. ___ likes trucks.", "He"),
+                CardItem("grammar_2_she", "Mia is a girl. ___ likes bugs.", "She"),
+                CardItem("grammar_2_they", "Sam and Mia play. ___ have fun.", "They"),
+                CardItem("grammar_2_we", "You and I read. ___ love books.", "We"),
+            ),
+            unlockRule = UnlockRule.DecksMastered(listOf("grammar_1")),
+        ))
+        add(Deck(
+            id = "grammar_3", title = "Past & Describing", subject = Subject.LANGUAGE,
+            items = listOf(
+                CardItem("grammar_3_jumped", "Yesterday I ___ (jump)", "jumped"),
+                CardItem("grammar_3_walked", "Yesterday we ___ (walk)", "walked"),
+                CardItem("grammar_3_played", "Yesterday she ___ (play)", "played"),
+                CardItem("grammar_3_ran", "Yesterday he ___ (run)", "ran"),
+                CardItem("grammar_3_ate", "Yesterday they ___ (eat)", "ate"),
+                CardItem("grammar_3_went", "Yesterday I ___ (go)", "went"),
+                CardItem("grammar_3_red", "Pick the describing word: The red ball bounced.", "red"),
+                CardItem("grammar_3_soft", "Pick the describing word: A soft kitten purred.", "soft"),
+                CardItem("grammar_3_huge", "Pick the describing word: We saw a huge truck.", "huge"),
+                CardItem("grammar_3_shiny", "Pick the describing word: Her shiny shoes squeak.", "shiny"),
+            ),
+            unlockRule = UnlockRule.DecksMastered(listOf("grammar_2")),
+        ))
+
         // Math ladder
         add(Deck(
             id = "numbers", title = "Numbers", subject = Subject.MATH,
