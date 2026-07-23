@@ -372,6 +372,49 @@ private fun ProfileDialog(vm: AppViewModel, state: AppState, onDismiss: () -> Un
 private fun ParentScreen(vm: AppViewModel, state: AppState, onClose: () -> Unit) {
     var resetTarget by remember { mutableStateOf<DeckStatus?>(null) }
     var deleteTarget by remember { mutableStateOf<us.jmresearch.abcflashcards.data.Profile?>(null) }
+    var renameTarget by remember { mutableStateOf<us.jmresearch.abcflashcards.data.Profile?>(null) }
+    var showResetAll by remember { mutableStateOf(false) }
+
+    if (showResetAll) {
+        val activeName = state.profiles.firstOrNull { it.id == state.activeProfileId }?.name ?: ""
+        AlertDialog(
+            onDismissRequest = { showResetAll = false },
+            title = { Text("Reset ALL progress?") },
+            text = { Text("Every deck for $activeName goes back to zero. This cannot be undone.") },
+            confirmButton = {
+                TextButton(onClick = { vm.resetAll(); showResetAll = false }) { Text("Reset everything") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showResetAll = false }) { Text("Cancel") }
+            },
+        )
+    }
+
+    renameTarget?.let { target ->
+        var editedName by remember(target.id) { mutableStateOf(target.name) }
+        AlertDialog(
+            onDismissRequest = { renameTarget = null },
+            title = { Text("Rename ${target.name}") },
+            text = {
+                OutlinedTextField(
+                    value = editedName,
+                    onValueChange = { editedName = it },
+                    label = { Text("Name") },
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        if (editedName.isNotBlank()) vm.renameProfile(target.id, editedName)
+                        renameTarget = null
+                    },
+                ) { Text("Save") }
+            },
+            dismissButton = {
+                TextButton(onClick = { renameTarget = null }) { Text("Cancel") }
+            },
+        )
+    }
 
     resetTarget?.let { target ->
         AlertDialog(
@@ -423,7 +466,13 @@ private fun ParentScreen(vm: AppViewModel, state: AppState, onClose: () -> Unit)
                     valueRange = 1f..10f,
                     steps = 8,
                 )
-                Text("Decks", fontSize = 16.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 8.dp))
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                ) {
+                    Text("Decks", fontSize = 16.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                    TextButton(onClick = { showResetAll = true }) { Text("Reset all") }
+                }
             }
             items(state.deckStatuses, key = { it.deck.id }) { status ->
                 Row(
@@ -461,6 +510,7 @@ private fun ParentScreen(vm: AppViewModel, state: AppState, onClose: () -> Unit)
                         fontSize = 16.sp,
                         modifier = Modifier.weight(1f),
                     )
+                    TextButton(onClick = { renameTarget = profile }) { Text("Rename") }
                     if (state.profiles.size > 1) {
                         TextButton(onClick = { deleteTarget = profile }) { Text("Remove") }
                     }

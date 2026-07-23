@@ -100,6 +100,23 @@ class ProgressStore(private val context: Context) {
         }
     }
 
+    suspend fun resetAll() {
+        context.dataStore.edit { prefs ->
+            val pid = activePid(prefs)
+            prefs[progressKey(pid)] = ""
+            if (pid == DEFAULT_PROFILE_ID) prefs.remove(legacyProgressKey)
+        }
+    }
+
+    suspend fun renameProfile(id: String, name: String) {
+        context.dataStore.edit { prefs ->
+            val clean = sanitizeProfileName(name)
+            if (clean.isBlank()) return@edit
+            val updated = profilesOf(prefs).map { if (it.id == id) it.copy(name = clean) else it }
+            prefs[profilesKey] = encodeProfiles(updated)
+        }
+    }
+
     suspend fun addProfile(name: String) {
         context.dataStore.edit { prefs ->
             val clean = sanitizeProfileName(name)

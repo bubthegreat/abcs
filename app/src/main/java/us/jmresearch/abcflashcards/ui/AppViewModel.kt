@@ -89,7 +89,13 @@ class AppViewModel(private val store: ProgressStore) : ViewModel() {
     private fun advance(lastShownId: String?) {
         val deck = deckById(_openDeckId.value) ?: return
         val s = state.value
-        _currentCard.value = pickNext(deck.items, s.progress, s.threshold, lastShownId, random)
+        _currentCard.value = if (_reviewMode.value) {
+            // Review of a mastered deck: uniform random over the whole deck, so it
+            // doesn't ping-pong between the two oldest-seen items.
+            pickNext(deck.items, emptyMap(), s.threshold, lastShownId, random)
+        } else {
+            pickNext(deck.items, s.progress, s.threshold, lastShownId, random)
+        }
     }
 
     fun markCorrect() = mark(::applyCorrect)
@@ -107,6 +113,14 @@ class AppViewModel(private val store: ProgressStore) : ViewModel() {
     fun resetDeck(deckId: String) {
         val deck = deckById(deckId) ?: return
         viewModelScope.launch { store.resetDeck(deck.items.map { it.id }) }
+    }
+
+    fun resetAll() {
+        viewModelScope.launch { store.resetAll() }
+    }
+
+    fun renameProfile(id: String, name: String) {
+        viewModelScope.launch { store.renameProfile(id, name) }
     }
 
     fun setThreshold(value: Int) {
