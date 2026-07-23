@@ -72,41 +72,11 @@ private val tabs = listOf(
 @Composable
 fun App(vm: AppViewModel, audio: AudioBox, ink: InkBox) {
     val state by vm.state.collectAsState()
-    var screen by remember { mutableStateOf("home") } // "home" | "deck" | "parent"
-
-    if (state.kidMode) {
-        KidMode(vm = vm, state = state, audio = audio, ink = ink)
-        return
-    }
-
-    when (screen) {
-        "home" -> HomeScreen(
-            vm = vm,
-            state = state,
-            audio = audio,
-            ink = ink,
-            onDeckTap = { deckId -> vm.openDeck(deckId); screen = "deck" },
-            onParentOpen = { screen = "parent" },
-        )
-        "deck" -> {
-            BackHandler { vm.closeDeck(); screen = "home" }
-            DeckScreen(vm = vm, state = state, audio = audio, onClose = { vm.closeDeck(); screen = "home" })
-        }
-        "parent" -> {
-            BackHandler { screen = "home" }
-            ParentScreen(vm = vm, state = state, audio = audio, onClose = { screen = "home" })
-        }
-    }
-}
-
-@Composable
-private fun KidMode(vm: AppViewModel, state: AppState, audio: AudioBox, ink: InkBox) {
-    val openDeckId by vm.openDeckId.collectAsState()
-    var showKidSwitch by remember { mutableStateOf(false) }
+    var screen by remember { mutableStateOf("home") } // "home" | "cards" | "quiz" | "parent"
     var showStarBurst by remember { mutableStateOf(false) }
     var lastBank by remember { mutableStateOf(-1) }
 
-    // Star celebration: bank went up while playing.
+    // Star celebration whenever the bank grows, whatever screen we're on.
     androidx.compose.runtime.LaunchedEffect(state.starBank) {
         if (lastBank >= 0 && state.starBank > lastBank) {
             showStarBurst = true
@@ -117,25 +87,31 @@ private fun KidMode(vm: AppViewModel, state: AppState, audio: AudioBox, ink: Ink
         lastBank = state.starBank
     }
 
-    if (showKidSwitch) {
-        ProfileDialog(vm, state, onDismiss = { showKidSwitch = false }, allowAdd = false)
-    }
-
     Box(modifier = Modifier.fillMaxSize()) {
-        if (openDeckId == null) {
-            BackHandler { vm.exitKidMode() }
-            KidHome(
+        when (screen) {
+            "home" -> HomeScreen(
                 vm = vm,
                 state = state,
                 audio = audio,
                 ink = ink,
-                onDeckTap = { vm.openDeck(it) },
-                onExitTap = { vm.exitKidMode() },
-                onProfileTap = { showKidSwitch = true },
+                onDeckTap = { deckId, quiz ->
+                    vm.openDeck(deckId)
+                    screen = if (quiz) "quiz" else "cards"
+                },
+                onParentOpen = { screen = "parent" },
             )
-        } else {
-            BackHandler { vm.closeDeck() }
-            QuizScreen(vm = vm, state = state, audio = audio, onClose = { vm.closeDeck() })
+            "cards" -> {
+                BackHandler { vm.closeDeck(); screen = "home" }
+                DeckScreen(vm = vm, state = state, audio = audio, onClose = { vm.closeDeck(); screen = "home" })
+            }
+            "quiz" -> {
+                BackHandler { vm.closeDeck(); screen = "home" }
+                QuizScreen(vm = vm, state = state, audio = audio, onClose = { vm.closeDeck(); screen = "home" })
+            }
+            "parent" -> {
+                BackHandler { screen = "home" }
+                ParentScreen(vm = vm, state = state, audio = audio, onClose = { screen = "home" })
+            }
         }
 
         androidx.compose.animation.AnimatedVisibility(
@@ -161,6 +137,7 @@ private fun KidMode(vm: AppViewModel, state: AppState, audio: AudioBox, ink: Ink
         }
     }
 }
+
 
 @Composable
 private fun PinDialog(title: String, onSubmit: (String) -> Boolean, onDismiss: () -> Unit) {
@@ -212,19 +189,17 @@ private fun SetPinDialog(onSet: (String) -> Unit, onDismiss: () -> Unit) {
 }
 
 @Composable
-private fun StarBar(state: AppState, onExitTap: (() -> Unit)? = null, onProfileTap: (() -> Unit)? = null) {
+private fun StarBar(state: AppState, onProfileTap: () -> Unit, onParentTap: () -> Unit) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
     ) {
-        if (onProfileTap != null) {
-            val name = state.profiles.firstOrNull { it.id == state.activeProfileId }?.name ?: ""
-            AssistChip(
-                onClick = onProfileTap,
-                label = { Text("👦 $name", fontSize = 16.sp) },
-            )
-            Spacer(Modifier.padding(horizontal = 6.dp))
-        }
+        val name = state.profiles.firstOrNull { it.id == state.activeProfileId }?.name ?: ""
+        AssistChip(
+            onClick = onProfileTap,
+            label = { Text("👦 $name", fontSize = 16.sp) },
+        )
+        Spacer(Modifier.padding(horizontal = 6.dp))
         Text("⭐ ${state.starBank}", fontSize = 24.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.padding(horizontal = 8.dp))
         LinearProgressIndicator(
@@ -233,62 +208,7 @@ private fun StarBar(state: AppState, onExitTap: (() -> Unit)? = null, onProfileT
         )
         Spacer(Modifier.padding(horizontal = 8.dp))
         Text("${state.starProgress}/$CORRECTS_PER_STAR", fontSize = 14.sp, color = Color.Gray)
-        if (onExitTap != null) {
-            TextButton(onClick = onExitTap) { Text("📚 Learn", fontSize = 16.sp) }
-        }
-    }
-}
-
-@Composable
-private fun KidHome(
-    vm: AppViewModel,
-    state: AppState,
-    audio: AudioBox,
-    ink: InkBox,
-    onDeckTap: (String) -> Unit,
-    onExitTap: () -> Unit,
-    onProfileTap: () -> Unit,
-) {
-    var tab by remember { mutableStateOf(0) }
-    Scaffold(
-        bottomBar = {
-            NavigationBar {
-                tabs.forEachIndexed { i, spec ->
-                    NavigationBarItem(
-                        selected = tab == i,
-                        onClick = { tab = i },
-                        icon = { Text(spec.emoji, fontSize = 24.sp) },
-                        label = { Text(spec.title, fontSize = 14.sp) },
-                    )
-                }
-            }
-        },
-    ) { padding ->
-        Column(modifier = Modifier.fillMaxSize().padding(padding)) {
-            StarBar(state, onExitTap, onProfileTap)
-            val spec = tabs[tab]
-            val subject = spec.subject
-            if (subject == null) {
-                WritingScreen(audio = audio, ink = ink, onStoryFinished = { vm.awardStoryStar() })
-            } else {
-                val decks = state.deckStatuses.filter { it.deck.subject == subject }
-                LazyVerticalGrid(
-                    columns = GridCells.Fixed(2),
-                    modifier = Modifier.fillMaxSize().padding(horizontal = 12.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                ) {
-                    items(decks, key = { it.deck.id }) { status ->
-                        DeckTile(
-                            status,
-                            subjectColors.getValue(subject),
-                            onDeckTap,
-                            isHomework = status.deck.id in state.homework,
-                        )
-                    }
-                }
-            }
-        }
+        TextButton(onClick = onParentTap) { Text("⚙️", fontSize = 22.sp) }
     }
 }
 
@@ -411,14 +331,36 @@ private fun HomeScreen(
     state: AppState,
     audio: AudioBox,
     ink: InkBox,
-    onDeckTap: (String) -> Unit,
+    onDeckTap: (String, Boolean) -> Unit,
     onParentOpen: () -> Unit,
 ) {
     var tab by remember { mutableStateOf(0) }
     var showProfiles by remember { mutableStateOf(false) }
     var showSetPin by remember { mutableStateOf(false) }
     var showParentPin by remember { mutableStateOf(false) }
-    val activeProfile = state.profiles.firstOrNull { it.id == state.activeProfileId }
+    var chooseDeck by remember { mutableStateOf<DeckStatus?>(null) }
+
+    chooseDeck?.let { chosen ->
+        AlertDialog(
+            onDismissRequest = { chooseDeck = null },
+            title = { Text(chosen.deck.title, textAlign = TextAlign.Center) },
+            text = {
+                Column {
+                    Button(
+                        onClick = { onDeckTap(chosen.deck.id, true); chooseDeck = null },
+                        modifier = Modifier.fillMaxWidth().height(72.dp),
+                    ) { Text("🎯 Quiz — tap answers, earn ⭐", fontSize = 18.sp) }
+                    Spacer(Modifier.height(10.dp))
+                    Button(
+                        onClick = { onDeckTap(chosen.deck.id, false); chooseDeck = null },
+                        modifier = Modifier.fillMaxWidth().height(72.dp),
+                    ) { Text("🃏 Flashcards — practice together", fontSize = 18.sp) }
+                }
+            },
+            confirmButton = {},
+            dismissButton = { TextButton(onClick = { chooseDeck = null }) { Text("Cancel") } },
+        )
+    }
 
     if (showProfiles) {
         ProfileDialog(vm, state, onDismiss = { showProfiles = false }, allowAdd = false)
@@ -450,41 +392,36 @@ private fun HomeScreen(
         bottomBar = {
             NavigationBar {
                 tabs.forEachIndexed { i, spec ->
+                    val isWritingHomework = spec.subject == null && WRITING_HOMEWORK_ID in state.homework
                     NavigationBarItem(
                         selected = tab == i,
                         onClick = { tab = i },
                         icon = { Text(spec.emoji, fontSize = 24.sp) },
-                        label = { Text(spec.title, fontSize = 14.sp) },
+                        label = { Text(if (isWritingHomework) "🌟 ${spec.title}" else spec.title, fontSize = 14.sp) },
                     )
                 }
             }
         },
     ) { padding ->
         Column(modifier = Modifier.fillMaxSize().padding(padding)) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
-            ) {
-                AssistChip(
-                    onClick = { showProfiles = true },
-                    label = { Text("👦 ${activeProfile?.name ?: "Kid 1"}", fontSize = 16.sp) },
-                )
-                Spacer(Modifier.weight(1f))
-                Text(
-                    "Let's Learn!",
-                    fontSize = 28.sp,
-                    fontWeight = FontWeight.Bold,
-                )
-                Spacer(Modifier.weight(1f))
-                Button(onClick = { vm.enterKidMode() }) { Text("▶ Play!", fontSize = 16.sp) }
-                TextButton(
-                    onClick = { if (state.parentPin == null) showSetPin = true else showParentPin = true },
-                ) { Text("⚙️", fontSize = 22.sp) }
-            }
+            StarBar(
+                state = state,
+                onProfileTap = { showProfiles = true },
+                onParentTap = { if (state.parentPin == null) showSetPin = true else showParentPin = true },
+            )
             val spec = tabs[tab]
             val subject = spec.subject
             if (subject == null) {
-                WritingScreen(audio = audio, ink = ink, onStoryFinished = {})
+                if (WRITING_HOMEWORK_ID in state.homework) {
+                    Text(
+                        "🌟 Homework — stories earn stars!",
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFFF57F17),
+                        modifier = Modifier.padding(horizontal = 12.dp),
+                    )
+                }
+                WritingScreen(audio = audio, ink = ink, onStoryFinished = { vm.awardStoryStar() })
             } else {
                 val decks = state.deckStatuses.filter { it.deck.subject == subject }
                 LazyVerticalGrid(
@@ -494,7 +431,12 @@ private fun HomeScreen(
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
                     items(decks, key = { it.deck.id }) { status ->
-                        DeckTile(status, subjectColors.getValue(subject), onDeckTap)
+                        DeckTile(
+                            status,
+                            subjectColors.getValue(subject),
+                            onDeckTap = { chooseDeck = status },
+                            isHomework = status.deck.id in state.homework,
+                        )
                     }
                 }
             }

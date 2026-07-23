@@ -246,17 +246,6 @@ class AppViewModel(private val store: ProgressStore) : ViewModel() {
         viewModelScope.launch { store.setPin(pin) }
     }
 
-    fun enterKidMode() {
-        closeDeck()
-        viewModelScope.launch { store.setKidMode(true) }
-    }
-
-    /** Play and Learn modes are both kid-safe; no PIN to move between them. */
-    fun exitKidMode() {
-        closeDeck()
-        viewModelScope.launch { store.setKidMode(false) }
-    }
-
     fun redeemStars(count: Int) {
         viewModelScope.launch { store.redeemStars(count) }
     }
