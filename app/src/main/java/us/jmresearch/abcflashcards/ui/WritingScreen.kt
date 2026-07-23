@@ -45,8 +45,7 @@ import kotlinx.coroutines.launch
 import us.jmresearch.abcflashcards.data.SENTENCES_PER_STORY
 import us.jmresearch.abcflashcards.data.WORDS_PER_SENTENCE
 import us.jmresearch.abcflashcards.data.isStoryComplete
-import us.jmresearch.abcflashcards.data.isValidSentence
-import us.jmresearch.abcflashcards.data.wordCount
+import us.jmresearch.abcflashcards.data.sentenceProblem
 
 private class DrawnStroke {
     val points = mutableStateListOf<Offset>()
@@ -62,6 +61,7 @@ fun WritingScreen(audio: AudioBox, ink: InkBox, onStoryFinished: () -> Unit) {
     var preview by remember { mutableStateOf<String?>(null) }
     var warning by remember { mutableStateOf<String?>(null) }
     var stylusOnly by remember { mutableStateOf(true) }
+    var eraserMode by remember { mutableStateOf(false) }
     var recognizing by remember { mutableStateOf(false) }
     var storyTold by remember { mutableStateOf(false) }
     var canvasSize by remember { mutableStateOf(Offset.Zero) }
@@ -83,7 +83,7 @@ fun WritingScreen(audio: AudioBox, ink: InkBox, onStoryFinished: () -> Unit) {
             }
             builder.addStroke(sb.build())
         }
-        return ink.recognize(builder.build(), canvasSize.x, canvasSize.y)?.lowercase()
+        return ink.recognize(builder.build(), canvasSize.x, canvasSize.y)
     }
 
     fun hearIt() {
@@ -107,11 +107,14 @@ fun WritingScreen(audio: AudioBox, ink: InkBox, onStoryFinished: () -> Unit) {
         recognizing = true
         scope.launch {
             val text = recognizeCanvas()
-            when {
-                text == null -> warning = "Couldn't read that — try again!"
-                !isValidSentence(text) ->
-                    warning = "A sentence needs at least $WORDS_PER_SENTENCE words! (I read: \"$text\" — ${wordCount(text)})"
-                else -> {
+            if (text == null) {
+                warning = "Couldn't read that — try again!"
+            } else {
+                val problem = sentenceProblem(text)
+                if (problem != null) {
+                    preview = text
+                    warning = problem
+                } else {
                     sentences.add(text)
                     warning = null
                     clearCanvas()
@@ -186,6 +189,9 @@ fun WritingScreen(audio: AudioBox, ink: InkBox, onStoryFinished: () -> Unit) {
                 enabled = strokes.isNotEmpty() && !recognizing,
                 modifier = Modifier.weight(1f).height(52.dp),
             ) { Text("✅ Sentence done", fontSize = 16.sp) }
+            TextButton(onClick = { eraserMode = !eraserMode }) {
+                Text(if (eraserMode) "🧹 Erasing" else "🧹", fontSize = 14.sp)
+            }
             TextButton(onClick = { clearCanvas() }) { Text("Clear") }
             TextButton(onClick = { stylusOnly = !stylusOnly }) {
                 Text(if (stylusOnly) "🖊️ Pen" else "👆 Finger", fontSize = 14.sp)
@@ -202,22 +208,37 @@ fun WritingScreen(audio: AudioBox, ink: InkBox, onStoryFinished: () -> Unit) {
             Canvas(
                 modifier = Modifier
                     .fillMaxSize()
-                    .pointerInput(stylusOnly) {
+                    .pointerInput(stylusOnly, eraserMode) {
+                        fun eraseAt(pos: Offset) {
+                            strokes.removeAll { s ->
+                                s.points.any { p ->
+                                    val dx = p.x - pos.x
+                                    val dy = p.y - pos.y
+                                    dx * dx + dy * dy < 48f * 48f
+                                }
+                            }
+                        }
                         awaitEachGesture {
                             val down = awaitFirstDown()
                             // Palm rejection: in pen mode only stylus input draws.
                             if (stylusOnly && down.type != PointerType.Stylus) return@awaitEachGesture
                             down.consume()
-                            val stroke = DrawnStroke()
-                            stroke.points.add(down.position)
-                            stroke.times.add(System.currentTimeMillis())
-                            strokes.add(stroke)
+                            val stroke = if (eraserMode) null else DrawnStroke().also {
+                                it.points.add(down.position)
+                                it.times.add(System.currentTimeMillis())
+                                strokes.add(it)
+                            }
+                            if (eraserMode) eraseAt(down.position)
                             while (true) {
                                 val event = awaitPointerEvent()
                                 val change = event.changes.firstOrNull { it.id == down.id } ?: break
                                 if (change.positionChanged()) {
-                                    stroke.points.add(change.position)
-                                    stroke.times.add(System.currentTimeMillis())
+                                    if (eraserMode) {
+                                        eraseAt(change.position)
+                                    } else {
+                                        stroke?.points?.add(change.position)
+                                        stroke?.times?.add(System.currentTimeMillis())
+                                    }
                                     change.consume()
                                 }
                                 if (!change.pressed) break

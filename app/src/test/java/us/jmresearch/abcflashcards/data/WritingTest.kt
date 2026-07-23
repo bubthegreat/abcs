@@ -29,4 +29,13 @@ class WritingTest {
         assertEquals(0, wordCount("   "))
         assertEquals(3, wordCount("the cat sat"))
     }
+
+    @Test fun sentenceProblemChecksLengthThenCapitalThenPeriod() {
+        assertTrue(sentenceProblem("the cat")!!.contains("3 words"))
+        assertTrue(sentenceProblem("the cat sat.")!!.contains("CAPITAL"))
+        assertTrue(sentenceProblem("The cat sat")!!.contains("period"))
+        assertEquals(null, sentenceProblem("The cat sat."))
+        assertEquals(null, sentenceProblem("Do dogs eat socks?"))
+        assertEquals(null, sentenceProblem("I like loud trucks!"))
+    }
 }
