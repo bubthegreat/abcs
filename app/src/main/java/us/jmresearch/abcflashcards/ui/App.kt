@@ -6,6 +6,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -62,6 +64,59 @@ private val subjectColors = mapOf(
     Subject.PHRASES to Color(0xFFEF6C00),
     Subject.MATH to Color(0xFF42A5F5),
 )
+
+private val rainbowColors = listOf(
+    Color(0xFFE53935), Color(0xFFFB8C00), Color(0xFFFDD835), Color(0xFF43A047),
+    Color(0xFF1E88E5), Color(0xFF8E24AA), Color(0xFFE53935),
+)
+
+/** Rounded-rect ring whose rainbow sweep spins while the shape stays put. */
+private fun Modifier.rainbowRing(cornerRadius: androidx.compose.ui.unit.Dp, strokeWidth: androidx.compose.ui.unit.Dp, angle: Float): Modifier =
+    drawWithContent {
+        drawContent()
+        val strokePx = strokeWidth.toPx()
+        val cornerPx = cornerRadius.toPx()
+        val ring = androidx.compose.ui.graphics.Path().apply {
+            fillType = androidx.compose.ui.graphics.PathFillType.EvenOdd
+            addRoundRect(
+                androidx.compose.ui.geometry.RoundRect(
+                    0f, 0f, size.width, size.height,
+                    androidx.compose.ui.geometry.CornerRadius(cornerPx),
+                ),
+            )
+            addRoundRect(
+                androidx.compose.ui.geometry.RoundRect(
+                    strokePx, strokePx, size.width - strokePx, size.height - strokePx,
+                    androidx.compose.ui.geometry.CornerRadius((cornerPx - strokePx).coerceAtLeast(0f)),
+                ),
+            )
+        }
+        androidx.compose.ui.graphics.drawscope.clipPath(ring) {
+            rotate(angle) {
+                val big = maxOf(size.width, size.height) * 2f
+                drawRect(
+                    brush = androidx.compose.ui.graphics.Brush.sweepGradient(rainbowColors),
+                    topLeft = Offset(size.width / 2 - big / 2, size.height / 2 - big / 2),
+                    size = androidx.compose.ui.geometry.Size(big, big),
+                )
+            }
+        }
+    }
+
+/** One shared spin angle for every rainbow ring on screen. */
+@Composable
+private fun rememberRainbowAngle(): Float {
+    val transition = androidx.compose.animation.core.rememberInfiniteTransition(label = "rainbow")
+    val angle by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 360f,
+        animationSpec = androidx.compose.animation.core.infiniteRepeatable(
+            animation = androidx.compose.animation.core.tween(2400, easing = androidx.compose.animation.core.LinearEasing),
+        ),
+        label = "rainbowAngle",
+    )
+    return angle
+}
 
 private data class TabSpec(val subject: Subject?, val title: String, val emoji: String)
 
@@ -444,20 +499,7 @@ private fun HomeScreen(
         )
     }
 
-    // One shared spin for all homework rings.
-    val ringTransition = androidx.compose.animation.core.rememberInfiniteTransition(label = "hwRing")
-    val ringAngle by ringTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = 360f,
-        animationSpec = androidx.compose.animation.core.infiniteRepeatable(
-            animation = androidx.compose.animation.core.tween(2400, easing = androidx.compose.animation.core.LinearEasing),
-        ),
-        label = "hwRingAngle",
-    )
-    val rainbow = listOf(
-        Color(0xFFE53935), Color(0xFFFB8C00), Color(0xFFFDD835), Color(0xFF43A047),
-        Color(0xFF1E88E5), Color(0xFF8E24AA), Color(0xFFE53935),
-    )
+    val ringAngle = rememberRainbowAngle()
 
     Scaffold(
         bottomBar = {
@@ -475,18 +517,10 @@ private fun HomeScreen(
                             Box(
                                 contentAlignment = Alignment.Center,
                                 modifier = Modifier
-                                    .size(44.dp)
+                                    .size(60.dp)
                                     .then(
                                         if (hasHomework) {
-                                            Modifier.drawBehind {
-                                                rotate(ringAngle) {
-                                                    drawCircle(
-                                                        brush = androidx.compose.ui.graphics.Brush.sweepGradient(rainbow),
-                                                        radius = size.minDimension / 2 - 3.dp.toPx(),
-                                                        style = androidx.compose.ui.graphics.drawscope.Stroke(width = 5.dp.toPx()),
-                                                    )
-                                                }
-                                            }
+                                            Modifier.rainbowRing(cornerRadius = 30.dp, strokeWidth = 7.dp, angle = ringAngle)
                                         } else {
                                             Modifier
                                         },
@@ -549,13 +583,14 @@ private fun DeckTile(
 ) {
     val enabled = status.unlocked || status.quizUnlocked
     val complete = status.masteredCount == status.total
+    val ringAngle = if (isHomework) rememberRainbowAngle() else 0f
     Card(
         shape = RoundedCornerShape(16.dp),
         modifier = Modifier
             .height(104.dp)
             .then(
                 if (isHomework) {
-                    Modifier.border(4.dp, Color(0xFFFFC107), RoundedCornerShape(16.dp))
+                    Modifier.rainbowRing(cornerRadius = 16.dp, strokeWidth = 6.dp, angle = ringAngle)
                 } else {
                     Modifier
                 },
