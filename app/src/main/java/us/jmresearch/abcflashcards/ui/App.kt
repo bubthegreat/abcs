@@ -135,13 +135,18 @@ fun App(vm: AppViewModel, audio: AudioBox, ink: InkBox) {
     val state by vm.state.collectAsState()
     var screen by remember { mutableStateOf("home") } // "home" | "cards" | "quiz" | "parent"
     var showStarBurst by remember { mutableStateOf(false) }
+    var burstAmount by remember { mutableStateOf(1) }
     var lastBank by remember { mutableStateOf(-1) }
 
     // Star celebration whenever the bank grows, whatever screen we're on.
     androidx.compose.runtime.LaunchedEffect(state.starBank) {
         if (lastBank >= 0 && state.starBank > lastBank) {
+            burstAmount = state.starBank - lastBank
             showStarBurst = true
-            audio.play("star_earned", "You earned a star!")
+            audio.play(
+                "star_earned",
+                if (burstAmount == 1) "You earned a star!" else "You earned $burstAmount stars!",
+            )
             kotlinx.coroutines.delay(2200)
             showStarBurst = false
         }
@@ -189,7 +194,7 @@ fun App(vm: AppViewModel, audio: AudioBox, ink: InkBox) {
             ) {
                 Text("⭐", fontSize = 110.sp)
                 Text(
-                    "You earned a star!",
+                    if (burstAmount == 1) "You earned a star!" else "+$burstAmount stars!",
                     fontSize = 30.sp,
                     fontWeight = FontWeight.Bold,
                     color = Color(0xFFF57F17),
