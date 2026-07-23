@@ -104,16 +104,17 @@ class CurriculumTest {
         assertEquals(UnlockRule.DecksMastered(listOf("colors", "shapes")), rule("colors_shapes"))
     }
 
-    @Test fun colorAndShapeCardsAreEmojiWithSpokenNames() {
-        deck("colors").items.forEach { item ->
-            assertTrue("color ids look like color_<name>", item.id.startsWith("color_"))
-            assertTrue("front should be emoji, not text: ${item.front}", item.front.length <= 3)
-        }
-        deck("shapes").items.forEach { item ->
-            assertTrue(item.id.startsWith("shape_"))
-        }
+    @Test fun colorAndShapeCardsAreDrawableSpecs() {
+        // Drawn by ShapeGlyph from the id; front mirrors the id.
+        (deck("colors").items + deck("shapes").items + deck("shapes_2").items + deck("colors_shapes").items)
+            .forEach { item ->
+                assertEquals(item.id, item.front)
+                assertTrue(
+                    "id must carry a drawable prefix: ${item.id}",
+                    item.id.startsWith("color_") || item.id.startsWith("shape_") || item.id.startsWith("combo_"),
+                )
+            }
         deck("colors_shapes").items.forEach { item ->
-            assertTrue(item.id.startsWith("combo_"))
             assertEquals(2, item.id.removePrefix("combo_").split("_").size) // color_shape
         }
     }

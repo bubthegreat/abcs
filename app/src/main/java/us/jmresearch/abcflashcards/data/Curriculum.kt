@@ -30,52 +30,47 @@ object Curriculum {
         }
     }
 
-    private val colorEmojis = listOf(
-        "red" to "🔴", "blue" to "🔵", "green" to "🟢", "yellow" to "🟡",
-        "orange" to "🟠", "purple" to "🟣", "pink" to "🌸", "brown" to "🟤",
-        "black" to "⚫", "white" to "⚪",
+    // Shape/color cards are DRAWN by the UI from the item id (see ShapeGlyph);
+    // front mirrors the id so non-drawing surfaces still have something sane.
+    private val colorNames = listOf(
+        "red", "blue", "green", "yellow", "orange", "purple", "pink", "brown", "black", "white",
     )
 
-    private val shapeEmojis = listOf(
-        "circle" to "⭕", "square" to "⬛", "rectangle" to "▬", "triangle" to "🔺",
-        "star" to "⭐", "heart" to "❤️", "diamond" to "🔷",
+    private val shapeNames = listOf(
+        "circle", "square", "rectangle", "triangle", "star", "heart", "diamond",
     )
 
-    private val advancedShapeEmojis = listOf(
-        "pentagon" to "⬟", "hexagon" to "⬢", "octagon" to "🛑",
-        "oval" to "⬭", "cross" to "➕",
+    private val advancedShapeNames = listOf(
+        "pentagon", "hexagon", "octagon", "oval", "cross",
     )
 
-    // Only color+shape pairs that have a real emoji.
-    private val comboEmojis = listOf(
-        Triple("red", "circle", "🔴"), Triple("blue", "circle", "🔵"), Triple("green", "circle", "🟢"),
-        Triple("yellow", "circle", "🟡"), Triple("orange", "circle", "🟠"), Triple("purple", "circle", "🟣"),
-        Triple("red", "square", "🟥"), Triple("blue", "square", "🟦"), Triple("green", "square", "🟩"),
-        Triple("yellow", "square", "🟨"), Triple("orange", "square", "🟧"), Triple("purple", "square", "🟪"),
-        Triple("red", "heart", "❤️"), Triple("blue", "heart", "💙"), Triple("green", "heart", "💚"),
-        Triple("yellow", "heart", "💛"), Triple("orange", "heart", "🧡"), Triple("purple", "heart", "💜"),
-    )
+    private val comboColorNames = listOf("red", "blue", "green", "yellow", "purple", "pink")
+    private val comboShapeNames = listOf("circle", "square", "triangle", "star")
 
     val decks: List<Deck> = buildList {
         // Colors & shapes — for the youngest learners; no reading required
         add(Deck(
             id = "colors", title = "Colors", subject = Subject.COLORS,
-            items = colorEmojis.map { (name, emoji) -> CardItem("color_$name", emoji) },
+            items = colorNames.map { name -> CardItem("color_$name", "color_$name") },
             unlockRule = UnlockRule.None,
         ))
         add(Deck(
             id = "shapes", title = "Shapes", subject = Subject.COLORS,
-            items = shapeEmojis.map { (name, emoji) -> CardItem("shape_$name", emoji) },
+            items = shapeNames.map { name -> CardItem("shape_$name", "shape_$name") },
             unlockRule = UnlockRule.None,
         ))
         add(Deck(
             id = "shapes_2", title = "More Shapes", subject = Subject.COLORS,
-            items = advancedShapeEmojis.map { (name, emoji) -> CardItem("shape_$name", emoji) },
+            items = advancedShapeNames.map { name -> CardItem("shape_$name", "shape_$name") },
             unlockRule = UnlockRule.DecksMastered(listOf("shapes")),
         ))
         add(Deck(
             id = "colors_shapes", title = "Colors + Shapes", subject = Subject.COLORS,
-            items = comboEmojis.map { (color, shape, emoji) -> CardItem("combo_${color}_$shape", emoji) },
+            items = comboColorNames.flatMap { color ->
+                comboShapeNames.map { shape ->
+                    CardItem("combo_${color}_$shape", "combo_${color}_$shape")
+                }
+            },
             unlockRule = UnlockRule.DecksMastered(listOf("colors", "shapes")),
         ))
 

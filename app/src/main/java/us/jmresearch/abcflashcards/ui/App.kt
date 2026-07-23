@@ -335,11 +335,15 @@ private fun QuizScreen(vm: AppViewModel, state: AppState, audio: AudioBox, onClo
                         },
                         modifier = Modifier.weight(1f).height(96.dp),
                     ) {
-                        Text(
-                            choice,
-                            fontSize = if (choice.length > 8) 20.sp else 32.sp,
-                            textAlign = TextAlign.Center,
-                        )
+                        if (isShapeSpec(choice)) {
+                            ShapeGlyph(choice, modifier = Modifier.size(64.dp))
+                        } else {
+                            Text(
+                                choice,
+                                fontSize = if (choice.length > 8) 20.sp else 32.sp,
+                                textAlign = TextAlign.Center,
+                            )
+                        }
                     }
                 }
             }
@@ -587,13 +591,17 @@ private fun DeckScreen(vm: AppViewModel, state: AppState, audio: AudioBox, onClo
                 Text("All Done! 🎉", fontSize = 40.sp, fontWeight = FontWeight.Bold)
             } else {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(
-                        text = if (showBack && c.back != null) c.back!! else c.front,
-                        fontSize = if (c.front.length > 8) 44.sp else 96.sp,
-                        fontWeight = FontWeight.Bold,
-                        textAlign = TextAlign.Center,
-                        lineHeight = 100.sp,
-                    )
+                    if (isShapeSpec(c.front) && !(showBack && c.back != null)) {
+                        ShapeGlyph(c.front, modifier = Modifier.size(240.dp))
+                    } else {
+                        Text(
+                            text = if (showBack && c.back != null) c.back!! else c.front,
+                            fontSize = if (c.front.length > 8) 44.sp else 96.sp,
+                            fontWeight = FontWeight.Bold,
+                            textAlign = TextAlign.Center,
+                            lineHeight = 100.sp,
+                        )
+                    }
                     if (c.back != null) {
                         Text(
                             if (showBack) "tap to hide answer" else "tap to see answer",
