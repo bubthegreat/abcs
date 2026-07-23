@@ -386,9 +386,13 @@ private fun HomeScreen(
                         enabled = chosen.quizUnlocked,
                         modifier = Modifier.fillMaxWidth().height(72.dp),
                     ) {
+                        val hw = chosen.deck.id in state.homework
                         Text(
-                            if (chosen.quizUnlocked) "🎯 Quiz — tap answers, earn ⭐ (${chosen.quizMasteredCount}/${chosen.total})"
-                            else "🔒 Quiz — master earlier decks first",
+                            when {
+                                !chosen.quizUnlocked -> "🔒 Quiz — master earlier decks first"
+                                hw -> "🎯 Quiz — homework! Earn ⭐ (${chosen.quizMasteredCount}/${chosen.total})"
+                                else -> "🎯 Quiz — tap answers (${chosen.quizMasteredCount}/${chosen.total})"
+                            },
                             fontSize = 18.sp,
                         )
                     }
@@ -957,19 +961,32 @@ private fun ParentScreen(vm: AppViewModel, state: AppState, audio: AudioBox, onC
                     fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.padding(top = 8.dp),
                 )
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                Card(
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
                 ) {
-                    Text(
-                        "⭐ Stars: ${state.starBank} (${state.starProgress}/$CORRECTS_PER_STAR to next)",
-                        fontSize = 16.sp,
-                        modifier = Modifier.weight(1f),
-                    )
-                    TextButton(
-                        onClick = { vm.redeemStars(1) },
-                        enabled = state.starBank > 0,
-                    ) { Text("Redeem 1") }
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth().padding(16.dp),
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                "⭐ ${state.starBank} stars",
+                                fontSize = 28.sp,
+                                fontWeight = FontWeight.Bold,
+                            )
+                            Text(
+                                "${state.starProgress}/$CORRECTS_PER_STAR toward the next star",
+                                fontSize = 14.sp,
+                                color = Color.Gray,
+                            )
+                        }
+                        Button(
+                            onClick = { vm.redeemStars(1) },
+                            enabled = state.starBank > 0,
+                            modifier = Modifier.height(56.dp),
+                        ) { Text("🎁 Redeem 1 star", fontSize = 16.sp) }
+                    }
                 }
                 Text("Mastery threshold: ${state.threshold}", fontSize = 16.sp, modifier = Modifier.padding(top = 12.dp))
                 Slider(
@@ -1046,7 +1063,7 @@ private fun ParentScreen(vm: AppViewModel, state: AppState, audio: AudioBox, onC
                     Spacer(Modifier.width(170.dp))
                 }
                 Text(
-                    "Homework on = that activity earns stars. If nothing is homework, everything earns stars.",
+                    "Stars are earned ONLY in quiz mode on homework activities.",
                     fontSize = 13.sp,
                     color = Color.Gray,
                 )

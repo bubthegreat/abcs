@@ -180,11 +180,9 @@ class AppViewModel(private val store: ProgressStore) : ViewModel() {
         }
     }
 
-    /** True when this activity counts toward stars: no homework set, or it's assigned. */
-    private fun earnsStars(activityId: String?): Boolean {
-        val hw = state.value.homework
-        return hw.isEmpty() || activityId in hw
-    }
+    /** Stars come ONLY from assigned homework. */
+    private fun earnsStars(activityId: String?): Boolean =
+        activityId != null && activityId in state.value.homework
 
     /** Quiz: correct tap. Advances quiz progress; feeds the star bank when the deck is homework. */
     fun quizCorrect() {
