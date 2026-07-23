@@ -172,6 +172,7 @@ fun App(vm: AppViewModel, audio: AudioBox, ink: InkBox, sound: SoundBox) {
                 state = state,
                 audio = audio,
                 ink = ink,
+                sound = sound,
                 onDeckTap = { deckId, quiz ->
                     vm.openDeck(deckId)
                     screen = if (quiz) "quiz" else "cards"
@@ -297,14 +298,18 @@ private fun StarBar(state: AppState, onProfileTap: () -> Unit, onParentTap: () -
 
 /** Kid-accessible sound settings — deliberately outside the PIN gate. */
 @Composable
-private fun SoundDialog(vm: AppViewModel, state: AppState, onDismiss: () -> Unit) {
+private fun SoundDialog(vm: AppViewModel, state: AppState, sound: SoundBox, onDismiss: () -> Unit) {
+    var songName by remember { mutableStateOf(sound.currentSongName) }
     AlertDialog(
         onDismissRequest = onDismiss,
         confirmButton = { TextButton(onClick = onDismiss) { Text("Done") } },
         title = { Text("🎵 Sounds") },
         text = {
             Column {
-                Text("Music", fontSize = 16.sp)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("Music — $songName", fontSize = 16.sp, modifier = Modifier.weight(1f))
+                    TextButton(onClick = { songName = sound.nextSong() }) { Text("⏭ Next song") }
+                }
                 Slider(
                     value = state.musicVolume,
                     onValueChange = { vm.setMusicVolume(it) },
@@ -509,6 +514,7 @@ private fun HomeScreen(
     state: AppState,
     audio: AudioBox,
     ink: InkBox,
+    sound: SoundBox,
     onDeckTap: (String, Boolean) -> Unit,
     onParentOpen: () -> Unit,
 ) {
@@ -520,7 +526,7 @@ private fun HomeScreen(
     var chooseDeck by remember { mutableStateOf<DeckStatus?>(null) }
 
     if (showSound) {
-        SoundDialog(vm, state, onDismiss = { showSound = false })
+        SoundDialog(vm, state, sound, onDismiss = { showSound = false })
     }
 
     chooseDeck?.let { chosen ->

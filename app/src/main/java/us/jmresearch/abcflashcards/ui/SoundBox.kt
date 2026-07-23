@@ -34,6 +34,18 @@ class SoundBox {
         }
     }
 
+    /** NES-style pulse wave with duty cycle. */
+    private fun pulseSample(freq: Double, i: Int, duty: Double): Double {
+        val phase = (freq * i / SAMPLE_RATE) % 1.0
+        return if (phase < duty) 1.0 else -1.0
+    }
+
+    /** NES-style triangle wave (bass channel). */
+    private fun triSample(freq: Double, i: Int): Double {
+        val phase = (freq * i / SAMPLE_RATE) % 1.0
+        return 4.0 * kotlin.math.abs(phase - 0.5) - 1.0
+    }
+
     private fun silence(ms: Int) = ShortArray(SAMPLE_RATE * ms / 1000)
 
     private fun concat(parts: List<ShortArray>): ShortArray {
@@ -68,30 +80,137 @@ class SoundBox {
         return track
     }
 
-    // --- music ---
+    // --- music: 8-bit chiptunes ---
+    // A song is a melody line (pulse wave) over a bass line (triangle wave).
+    // Notes are (semitone from A4 or null for rest, length in beat units).
 
-    /** Gentle C-pentatonic lullaby-ish loop, ~9 seconds. */
-    private fun buildMelody(): ShortArray {
-        // C5 D5 E5 G5 A5 relative to A4: 3, 5, 7, 10, 12; octave down for bass feel
-        val seq = listOf(
-            3 to 350, 7 to 350, 10 to 350, 12 to 500, 10 to 350, 7 to 350,
-            5 to 500, 3 to 350, 5 to 350, 7 to 700, -9 to 350, 3 to 350,
-            7 to 350, 10 to 500, 7 to 350, 5 to 350, 3 to 700, -9 to 500,
-        )
-        val parts = mutableListOf<ShortArray>()
-        seq.forEach { (semi, ms) ->
-            parts.add(tone(note(semi), ms, amplitude = 0.18))
-            parts.add(silence(60))
+    private class Chiptune(
+        val name: String,
+        val unitMs: Int,
+        val duty: Double,
+        val melody: List<Pair<Int?, Int>>,
+        val bass: List<Pair<Int?, Int>>,
+    )
+
+    private val songs = listOf(
+        // Bright I-vi-IV-V runner in C.
+        Chiptune(
+            name = "Sunny Run", unitMs = 110, duty = 0.25,
+            melody = listOf(
+                3 to 1, 7 to 1, 10 to 1, 15 to 1, 10 to 1, 7 to 1, 3 to 1, 7 to 1,
+                0 to 1, 3 to 1, 7 to 1, 12 to 1, 7 to 1, 3 to 1, 0 to 1, 3 to 1,
+                1 to 1, 5 to 1, 8 to 1, 13 to 1, 8 to 1, 5 to 1, 1 to 1, 5 to 1,
+                5 to 1, 7 to 1, 8 to 1, 10 to 2, 7 to 2, 3 to 2,
+                3 to 1, 7 to 1, 10 to 1, 15 to 1, 19 to 2, 15 to 1, 10 to 1,
+                17 to 1, 15 to 1, 13 to 1, 12 to 1, 10 to 2, 8 to 1, 7 to 1,
+                8 to 1, 10 to 1, 12 to 1, 8 to 1, 5 to 2, 7 to 2,
+                3 to 2, null to 1, 3 to 1, 3 to 4,
+            ),
+            bass = listOf(
+                -21 to 4, -21 to 4, -12 to 4, -12 to 4,
+                -16 to 4, -16 to 4, -14 to 4, -14 to 4,
+                -21 to 4, -21 to 4, -12 to 4, -12 to 4,
+                -16 to 4, -14 to 4, -21 to 4, -21 to 4,
+            ),
+        ),
+        // Bouncy arcade tune in A minor.
+        Chiptune(
+            name = "Pixel Bounce", unitMs = 100, duty = 0.5,
+            melody = listOf(
+                0 to 1, 3 to 1, 7 to 1, 12 to 1, 10 to 1, 7 to 1, 3 to 1, 7 to 1,
+                null to 1, 8 to 1, 12 to 1, 15 to 1, 12 to 1, 8 to 1, 5 to 1, 8 to 1,
+                7 to 1, 10 to 1, 14 to 1, 10 to 1, 7 to 1, 4 to 1, 7 to 1, 10 to 1,
+                12 to 2, 10 to 1, 8 to 1, 7 to 2, 3 to 2,
+                0 to 1, 3 to 1, 7 to 1, 12 to 1, 15 to 2, 12 to 2,
+                13 to 1, 12 to 1, 10 to 1, 8 to 1, 7 to 1, 5 to 1, 3 to 1, 1 to 1,
+                0 to 2, 7 to 2, 0 to 2, null to 2,
+            ),
+            bass = listOf(
+                -24 to 2, -12 to 2, -24 to 2, -12 to 2,
+                -28 to 2, -16 to 2, -28 to 2, -16 to 2,
+                -26 to 2, -14 to 2, -26 to 2, -14 to 2,
+                -24 to 2, -12 to 2, -29 to 2, -26 to 2,
+                -24 to 2, -12 to 2, -28 to 2, -16 to 2,
+                -26 to 2, -14 to 2, -24 to 2, -24 to 2,
+            ),
+        ),
+        // Heroic quest theme in G with rests for punch.
+        Chiptune(
+            name = "Star Quest", unitMs = 130, duty = 0.125,
+            melody = listOf(
+                10 to 1, null to 1, 10 to 1, 14 to 1, 17 to 2, 14 to 1, 10 to 1,
+                8 to 1, null to 1, 8 to 1, 12 to 1, 15 to 2, 12 to 1, 8 to 1,
+                7 to 1, 10 to 1, 14 to 1, 19 to 1, 17 to 2, 14 to 2,
+                12 to 1, 14 to 1, 15 to 1, 14 to 1, 10 to 2, null to 2,
+                10 to 1, 14 to 1, 17 to 1, 22 to 2, 19 to 1, 17 to 1, 14 to 1,
+                15 to 1, 12 to 1, 8 to 1, 5 to 1, 7 to 2, 10 to 2,
+            ),
+            bass = listOf(
+                -14 to 4, -14 to 4, -16 to 4, -16 to 4,
+                -17 to 4, -12 to 4, -14 to 4, -14 to 4,
+                -14 to 4, -19 to 4, -16 to 4, -14 to 4,
+            ),
+        ),
+    )
+
+    private var songIndex = 0
+
+    val currentSongName: String
+        get() = songs[songIndex].name
+
+    private fun renderSong(song: Chiptune): ShortArray {
+        fun lineSamples(line: List<Pair<Int?, Int>>): Int =
+            line.sumOf { it.second } * SAMPLE_RATE * song.unitMs / 1000
+        val total = maxOf(lineSamples(song.melody), lineSamples(song.bass))
+        val out = ShortArray(total)
+
+        fun renderLine(line: List<Pair<Int?, Int>>, isBass: Boolean) {
+            var pos = 0
+            // repeat the shorter line until it fills the track
+            while (pos < total) {
+                for ((semi, units) in line) {
+                    val len = units * SAMPLE_RATE * song.unitMs / 1000
+                    if (semi != null) {
+                        val freq = note(semi)
+                        val noteEnd = (pos + len).coerceAtMost(total)
+                        for (i in pos until noteEnd) {
+                            val t = (i - pos).toDouble() / len
+                            val env = min(1.0, min(t * 30, (1 - t) * 6)).coerceAtLeast(0.0)
+                            val sample = if (isBass) {
+                                triSample(freq, i) * 0.14
+                            } else {
+                                pulseSample(freq, i, song.duty) * 0.09
+                            }
+                            val mixed = out[i] + (sample * env * Short.MAX_VALUE).toInt()
+                            out[i] = mixed.coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt()).toShort()
+                        }
+                    }
+                    pos += len
+                    if (pos >= total) break
+                }
+            }
         }
-        return concat(parts)
+
+        renderLine(song.melody, isBass = false)
+        renderLine(song.bass, isBass = true)
+        return out
     }
 
     fun startMusic() {
         if (musicTrack != null) return
-        musicTrack = buildTrack(buildMelody(), loop = true).also {
+        musicTrack = buildTrack(renderSong(songs[songIndex]), loop = true).also {
             it.setVolume(musicVolume)
             if (musicVolume > 0f) it.play()
         }
+    }
+
+    /** Switch to the next chiptune, keeping volume and play state. */
+    fun nextSong(): String {
+        songIndex = (songIndex + 1) % songs.size
+        musicTrack?.release()
+        musicTrack = null
+        startMusic()
+        return currentSongName
     }
 
     fun setMusicVolume(volume: Float) {
