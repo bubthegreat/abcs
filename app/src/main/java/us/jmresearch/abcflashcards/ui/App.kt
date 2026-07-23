@@ -324,14 +324,23 @@ private fun QuizScreen(vm: AppViewModel, state: AppState, audio: AudioBox, onClo
                             }
                         },
                         enabled = wrongPicked == null || revealColor != null,
-                        colors = if (revealColor != null) {
-                            androidx.compose.material3.ButtonDefaults.buttonColors(
+                        colors = when {
+                            revealColor != null -> androidx.compose.material3.ButtonDefaults.buttonColors(
                                 containerColor = revealColor,
                                 disabledContainerColor = revealColor,
                                 disabledContentColor = Color.White,
                             )
+                            isShapeSpec(choice) -> androidx.compose.material3.ButtonDefaults.buttonColors(
+                                // Light canvas behind drawn shapes so their color reads true.
+                                containerColor = Color(0xFFFFFDF5),
+                                disabledContainerColor = Color(0xFFFFFDF5),
+                            )
+                            else -> androidx.compose.material3.ButtonDefaults.buttonColors()
+                        },
+                        border = if (isShapeSpec(choice) && revealColor == null) {
+                            androidx.compose.foundation.BorderStroke(2.dp, Color(0xFFBDBDBD))
                         } else {
-                            androidx.compose.material3.ButtonDefaults.buttonColors()
+                            null
                         },
                         modifier = Modifier.weight(1f).height(96.dp),
                     ) {
