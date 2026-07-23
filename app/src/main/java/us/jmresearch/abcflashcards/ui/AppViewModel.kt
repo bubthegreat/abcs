@@ -139,20 +139,24 @@ class AppViewModel(private val store: ProgressStore) : ViewModel() {
     private val _storySentences = MutableStateFlow<List<String>>(emptyList())
     val storySentences: StateFlow<List<String>> = _storySentences
 
-    private val _storyTold = MutableStateFlow(false)
-    val storyTold: StateFlow<Boolean> = _storyTold
+    private val _storyRewarded = MutableStateFlow(false)
 
+    /**
+     * Accepting the final sentence IS story completion — the homework reward
+     * pays out right here, not when "Tell my story" is tapped.
+     */
     fun addStorySentence(sentence: String) {
-        _storySentences.value = _storySentences.value + sentence
-    }
-
-    fun markStoryTold() {
-        _storyTold.value = true
+        val updated = _storySentences.value + sentence
+        _storySentences.value = updated
+        if (updated.size >= us.jmresearch.abcflashcards.data.SENTENCES_PER_STORY && !_storyRewarded.value) {
+            _storyRewarded.value = true
+            awardStoryStar()
+        }
     }
 
     fun clearStory() {
         _storySentences.value = emptyList()
-        _storyTold.value = false
+        _storyRewarded.value = false
     }
 
     /** True once the parent tapped "Keep practicing" on a fully mastered deck. */

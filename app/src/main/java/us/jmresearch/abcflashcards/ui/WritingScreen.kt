@@ -70,12 +70,11 @@ private fun rowIndexOf(stroke: DrawnStroke, canvasHeight: Float): Int {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun WritingScreen(vm: AppViewModel, audio: AudioBox, ink: InkBox, onStoryFinished: () -> Unit) {
+fun WritingScreen(vm: AppViewModel, audio: AudioBox, ink: InkBox) {
     val modelReady by ink.modelReady.collectAsState()
     val scope = rememberCoroutineScope()
 
     val sentences by vm.storySentences.collectAsState()
-    val storyTold by vm.storyTold.collectAsState()
     var preview by remember { mutableStateOf<String?>(null) }
     var warning by remember { mutableStateOf<String?>(null) }
     var stylusOnly by remember { mutableStateOf(true) }
@@ -172,13 +171,7 @@ fun WritingScreen(vm: AppViewModel, audio: AudioBox, ink: InkBox, onStoryFinishe
 
         if (storyDone) {
             Button(
-                onClick = {
-                    audio.speakStory(sentences)
-                    if (!storyTold) {
-                        vm.markStoryTold()
-                        onStoryFinished()
-                    }
-                },
+                onClick = { audio.speakStory(sentences) },
                 modifier = Modifier.fillMaxWidth().height(72.dp).padding(top = 8.dp),
             ) { Text("📖 Tell my story!", fontSize = 22.sp) }
             TextButton(onClick = { vm.clearStory(); clearCanvas() }) {
