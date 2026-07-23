@@ -217,15 +217,60 @@ class SoundBox {
         ),
     )
 
-    private val songs: List<Chiptune> by lazy { baseSongs + moreSongs }
+    private val slowSongs = listOf(
+        // Slow minor cruise; sparse kick, lots of space.
+        Chiptune(
+            name = "Night Drive", unitMs = 190, duty = 0.5,
+            melody = listOf(
+                0 to 2, 3 to 1, 7 to 1, 5 to 2, 3 to 2,
+                0 to 2, 3 to 1, 5 to 1, 3 to 2, null to 2,
+                -2 to 2, 0 to 1, 3 to 1, 7 to 2, 5 to 2,
+                3 to 2, 0 to 2, null to 4,
+            ),
+            bass = listOf(
+                -24 to 4, -26 to 4, -28 to 4, -24 to 4,
+                -21 to 4, -26 to 4, -24 to 8,
+            ),
+            drums = "K-------h---S---",
+        ),
+        // Gentle pastoral lilt, no percussion at all.
+        Chiptune(
+            name = "Nature Walk", unitMs = 200, duty = 0.25,
+            melody = listOf(
+                7 to 1, 10 to 1, 12 to 2, 10 to 1, 7 to 1, 5 to 2,
+                3 to 1, 5 to 1, 7 to 2, 5 to 1, 3 to 1, 0 to 2,
+                3 to 1, 7 to 1, 10 to 2, 12 to 1, 10 to 1, 7 to 2,
+                5 to 2, 3 to 2, 3 to 4,
+            ),
+            bass = listOf(
+                -21 to 4, -16 to 4, -14 to 4, -21 to 4,
+                -16 to 4, -12 to 4, -21 to 8,
+            ),
+        ),
+        // Dreamy rolling arpeggios, like slow waves.
+        Chiptune(
+            name = "Ocean View", unitMs = 220, duty = 0.5,
+            melody = listOf(
+                8 to 1, 12 to 1, 15 to 1, 19 to 1, 15 to 1, 12 to 1,
+                7 to 1, 10 to 1, 14 to 1, 17 to 1, 14 to 1, 10 to 1,
+                5 to 1, 8 to 1, 12 to 1, 15 to 1, 12 to 1, 8 to 1,
+                3 to 1, 7 to 1, 10 to 1, 15 to 2, null to 1,
+            ),
+            bass = listOf(
+                -16 to 6, -14 to 6, -19 to 6, -21 to 6,
+            ),
+        ),
+    )
 
-    private var songIndex = 0
+    private val songs: List<Chiptune> by lazy { baseSongs + moreSongs + slowSongs }
+
+    private var songIndex = -1
 
     /** Observable so the sounds dialog tracks auto-advance. */
     val currentSong = kotlinx.coroutines.flow.MutableStateFlow("")
 
     val currentSongName: String
-        get() = songs[songIndex].name
+        get() = if (songIndex < 0) "" else songs[songIndex].name
 
     private fun renderSong(song: Chiptune): ShortArray {
         val unitLen = SAMPLE_RATE * song.unitMs / 1000
@@ -331,6 +376,7 @@ class SoundBox {
 
     fun startMusic() {
         if (musicTrack != null) return
+        if (songIndex < 0) songIndex = songs.indices.random()
         currentSong.value = songs[songIndex].name
         val pcm = renderSong(songs[songIndex])
         // Play once; the end-of-track marker advances to the next song.
