@@ -217,11 +217,11 @@ private fun QuizScreen(vm: AppViewModel, state: AppState, audio: AudioBox, onClo
     val quiz by vm.currentQuiz.collectAsState()
     val openDeckId by vm.openDeckId.collectAsState()
     val reviewMode by vm.reviewMode.collectAsState()
-    var wrongChoices by remember { mutableStateOf(setOf<String>()) }
+    var wrongPicked by remember { mutableStateOf<String?>(null) }
     var flashCorrect by remember { mutableStateOf(false) }
 
     val status = state.deckStatuses.firstOrNull { it.deck.id == openDeckId }
-    val complete = status != null && status.masteredCount == status.total && status.total > 0
+    val complete = status != null && status.quizMasteredCount == status.total && status.total > 0
 
     if (complete && !reviewMode) {
         CelebrationScreen(
@@ -243,8 +243,16 @@ private fun QuizScreen(vm: AppViewModel, state: AppState, audio: AudioBox, onClo
         }
     }
 
+    // Wrong answer: correct one is shown green; move on after the kid has seen it.
+    androidx.compose.runtime.LaunchedEffect(wrongPicked) {
+        if (wrongPicked != null) {
+            kotlinx.coroutines.delay(2000)
+            vm.quizWrongAdvance()
+        }
+    }
+
     androidx.compose.runtime.LaunchedEffect(quizNonce) {
-        wrongChoices = emptySet()
+        wrongPicked = null
         flashCorrect = false
         q?.let {
             audio.play(
@@ -295,22 +303,34 @@ private fun QuizScreen(vm: AppViewModel, state: AppState, audio: AudioBox, onClo
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 q.choices.forEach { choice ->
-                    val disabled = choice in wrongChoices
+                    val isAnswer = choice == q.answer
+                    val revealColor = when {
+                        wrongPicked == null -> null
+                        isAnswer -> Color(0xFF43A047)
+                        choice == wrongPicked -> Color(0xFFD32F2F)
+                        else -> null
+                    }
                     Button(
                         onClick = {
-                            if (choice == q.answer) {
+                            if (wrongPicked != null) return@Button
+                            if (isAnswer) {
                                 flashCorrect = true
                                 audio.play("praise", listOf("Great job!", "You got it!", "Awesome!").random())
                             } else {
-                                wrongChoices = wrongChoices + choice
-                                vm.quizWrong()
-                                audio.play(
-                                    us.jmresearch.abcflashcards.data.recordingKeyFor(q.item.id),
-                                    q.spokenPrompt,
-                                )
+                                wrongPicked = choice
+                                audio.play("reveal", "The answer is ${q.answer}")
                             }
                         },
-                        enabled = !disabled,
+                        enabled = wrongPicked == null || revealColor != null,
+                        colors = if (revealColor != null) {
+                            androidx.compose.material3.ButtonDefaults.buttonColors(
+                                containerColor = revealColor,
+                                disabledContainerColor = revealColor,
+                                disabledContentColor = Color.White,
+                            )
+                        } else {
+                            androidx.compose.material3.ButtonDefaults.buttonColors()
+                        },
                         modifier = Modifier.weight(1f).height(96.dp),
                     ) {
                         Text(
@@ -348,13 +368,27 @@ private fun HomeScreen(
                 Column {
                     Button(
                         onClick = { onDeckTap(chosen.deck.id, true); chooseDeck = null },
+                        enabled = chosen.quizUnlocked,
                         modifier = Modifier.fillMaxWidth().height(72.dp),
-                    ) { Text("🎯 Quiz — tap answers, earn ⭐", fontSize = 18.sp) }
+                    ) {
+                        Text(
+                            if (chosen.quizUnlocked) "🎯 Quiz — tap answers, earn ⭐ (${chosen.quizMasteredCount}/${chosen.total})"
+                            else "🔒 Quiz — master earlier decks first",
+                            fontSize = 18.sp,
+                        )
+                    }
                     Spacer(Modifier.height(10.dp))
                     Button(
                         onClick = { onDeckTap(chosen.deck.id, false); chooseDeck = null },
+                        enabled = chosen.unlocked,
                         modifier = Modifier.fillMaxWidth().height(72.dp),
-                    ) { Text("🃏 Flashcards — practice together", fontSize = 18.sp) }
+                    ) {
+                        Text(
+                            if (chosen.unlocked) "🃏 Flashcards — practice together (${chosen.masteredCount}/${chosen.total})"
+                            else "🔒 Flashcards — master earlier decks first",
+                            fontSize = 18.sp,
+                        )
+                    }
                 }
             },
             confirmButton = {},
@@ -392,12 +426,16 @@ private fun HomeScreen(
         bottomBar = {
             NavigationBar {
                 tabs.forEachIndexed { i, spec ->
-                    val isWritingHomework = spec.subject == null && WRITING_HOMEWORK_ID in state.homework
+                    val hasHomework = if (spec.subject == null) {
+                        WRITING_HOMEWORK_ID in state.homework
+                    } else {
+                        state.deckStatuses.any { it.deck.subject == spec.subject && it.deck.id in state.homework }
+                    }
                     NavigationBarItem(
                         selected = tab == i,
                         onClick = { tab = i },
                         icon = { Text(spec.emoji, fontSize = 24.sp) },
-                        label = { Text(if (isWritingHomework) "🌟 ${spec.title}" else spec.title, fontSize = 14.sp) },
+                        label = { Text(if (hasHomework) "🌟 ${spec.title}" else spec.title, fontSize = 14.sp) },
                     )
                 }
             }
@@ -451,7 +489,7 @@ private fun DeckTile(
     onDeckTap: (String) -> Unit,
     isHomework: Boolean = false,
 ) {
-    val enabled = status.unlocked
+    val enabled = status.unlocked || status.quizUnlocked
     val complete = status.masteredCount == status.total
     Card(
         shape = RoundedCornerShape(16.dp),
@@ -484,7 +522,7 @@ private fun DeckTile(
                     fontWeight = FontWeight.Bold,
                 )
                 Text(
-                    "${status.masteredCount}/${status.total}",
+                    "🃏 ${status.masteredCount}/${status.total}   🎯 ${status.quizMasteredCount}/${status.total}",
                     color = Color.White.copy(alpha = 0.9f),
                     fontSize = 14.sp,
                 )

@@ -25,6 +25,7 @@ class ProgressStore(private val context: Context) {
     private val legacyThresholdKey = androidx.datastore.preferences.core.intPreferencesKey("threshold_v1")
 
     private fun progressKey(pid: String) = stringPreferencesKey("progress_v1_$pid")
+    private fun quizProgressKey(pid: String) = stringPreferencesKey("quizprogress_v1_$pid")
     private fun thresholdKey(pid: String) = stringPreferencesKey("threshold_v1_$pid")
     private fun forceUnlockedKey(pid: String) = stringPreferencesKey("force_unlocked_v1_$pid")
     private fun starBankKey(pid: String) = stringPreferencesKey("star_bank_v1_$pid")
@@ -62,6 +63,20 @@ class ProgressStore(private val context: Context) {
         decodeProgress(rawProgress(prefs, activePid(prefs)))
     }
 
+    /** Quiz mode has its own progress universe, independent of flashcard mastery. */
+    val quizProgress: Flow<Map<String, ItemProgress>> = safeData.map { prefs ->
+        decodeProgress(prefs[quizProgressKey(activePid(prefs))] ?: "")
+    }
+
+    suspend fun updateQuizItem(itemId: String, transform: (ItemProgress) -> ItemProgress) {
+        context.dataStore.edit { prefs ->
+            val pid = activePid(prefs)
+            val map = decodeProgress(prefs[quizProgressKey(pid)] ?: "").toMutableMap()
+            map[itemId] = transform(map[itemId] ?: ItemProgress())
+            prefs[quizProgressKey(pid)] = encodeProgress(map)
+        }
+    }
+
     val threshold: Flow<Int> = safeData.map { prefs ->
         rawThreshold(prefs, activePid(prefs))
     }
@@ -86,6 +101,9 @@ class ProgressStore(private val context: Context) {
             val map = decodeProgress(rawProgress(prefs, pid)).toMutableMap()
             itemIds.forEach { map.remove(it) }
             prefs[progressKey(pid)] = encodeProgress(map)
+            val quizMap = decodeProgress(prefs[quizProgressKey(pid)] ?: "").toMutableMap()
+            itemIds.forEach { quizMap.remove(it) }
+            prefs[quizProgressKey(pid)] = encodeProgress(quizMap)
         }
     }
 
@@ -178,6 +196,7 @@ class ProgressStore(private val context: Context) {
         context.dataStore.edit { prefs ->
             val pid = activePid(prefs)
             prefs[progressKey(pid)] = ""
+            prefs[quizProgressKey(pid)] = ""
             if (pid == DEFAULT_PROFILE_ID) prefs.remove(legacyProgressKey)
         }
     }
@@ -216,6 +235,7 @@ class ProgressStore(private val context: Context) {
             prefs[profilesKey] = encodeProfiles(remaining)
             if (activePid(prefs) == id) prefs[activeProfileKey] = remaining.first().id
             prefs.remove(progressKey(id))
+            prefs.remove(quizProgressKey(id))
             prefs.remove(thresholdKey(id))
             prefs.remove(forceUnlockedKey(id))
             if (id == DEFAULT_PROFILE_ID) {

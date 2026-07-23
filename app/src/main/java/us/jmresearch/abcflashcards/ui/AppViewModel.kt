@@ -28,7 +28,14 @@ import us.jmresearch.abcflashcards.engine.isDeckUnlocked
 import us.jmresearch.abcflashcards.engine.isMastered
 import us.jmresearch.abcflashcards.engine.pickNext
 
-data class DeckStatus(val deck: Deck, val unlocked: Boolean, val masteredCount: Int, val total: Int)
+data class DeckStatus(
+    val deck: Deck,
+    val unlocked: Boolean,
+    val masteredCount: Int,
+    val total: Int,
+    val quizUnlocked: Boolean,
+    val quizMasteredCount: Int,
+)
 
 data class AppState(
     val deckStatuses: List<DeckStatus> = emptyList(),
@@ -42,6 +49,7 @@ data class AppState(
     val kidMode: Boolean = false,
     val parentPin: String? = null,
     val homework: Set<String> = emptySet(),
+    val quizProgress: Map<String, ItemProgress> = emptyMap(),
 )
 
 /** Special homework id for the writing/story activity (not a deck). */
@@ -52,6 +60,7 @@ private data class Core(
     val threshold: Int,
     val force: Set<String>,
     val homework: Set<String>,
+    val quizProgress: Map<String, ItemProgress>,
 )
 
 private data class Profs(val profiles: List<Profile>, val activeId: String)
@@ -71,7 +80,7 @@ class AppViewModel(private val store: ProgressStore) : ViewModel() {
 
     val state: StateFlow<AppState> =
         combine(
-            combine(store.progress, store.threshold, store.forceUnlocked, store.homework) { p, t, f, h -> Core(p, t, f, h) },
+            combine(store.progress, store.threshold, store.forceUnlocked, store.homework, store.quizProgress) { p, t, f, h, q -> Core(p, t, f, h, q) },
             combine(store.profiles, store.activeProfileId) { pr, id -> Profs(pr, id) },
             combine(store.starBank, store.starProgress, store.kidMode, store.parentPin) { b, s, k, pin ->
                 KidBits(b, s, k, pin)
@@ -83,6 +92,8 @@ class AppViewModel(private val store: ProgressStore) : ViewModel() {
                     unlocked = isDeckUnlocked(deck, Curriculum.decks, core.progress, core.threshold, core.force),
                     masteredCount = deck.items.count { isMastered(core.progress[it.id], core.threshold) },
                     total = deck.items.size,
+                    quizUnlocked = isDeckUnlocked(deck, Curriculum.decks, core.quizProgress, core.threshold, core.force),
+                    quizMasteredCount = deck.items.count { isMastered(core.quizProgress[it.id], core.threshold) },
                 )
             }
             AppState(
@@ -117,13 +128,15 @@ class AppViewModel(private val store: ProgressStore) : ViewModel() {
     private val _reviewMode = MutableStateFlow(false)
     val reviewMode: StateFlow<Boolean> = _reviewMode
 
-    private var wrongAlreadyThisCard = false
+    /** True when the open deck was entered in quiz mode (separate progress track). */
+    private var quizSession = false
 
     private fun deckById(id: String?): Deck? = Curriculum.decks.firstOrNull { it.id == id }
 
-    fun openDeck(deckId: String) {
+    fun openDeck(deckId: String, quiz: Boolean = false) {
         _openDeckId.value = deckId
         _reviewMode.value = false
+        quizSession = quiz
         advance(lastShownId = null)
     }
 
@@ -142,13 +155,13 @@ class AppViewModel(private val store: ProgressStore) : ViewModel() {
     private fun advance(lastShownId: String?) {
         val deck = deckById(_openDeckId.value) ?: return
         val s = state.value
-        wrongAlreadyThisCard = false
+        val progress = if (quizSession) s.quizProgress else s.progress
         val next = if (_reviewMode.value) {
             // Review of a mastered deck: uniform random over the whole deck, so it
             // doesn't ping-pong between the two oldest-seen items.
             pickNext(deck.items, emptyMap(), s.threshold, lastShownId, random)
         } else {
-            pickNext(deck.items, s.progress, s.threshold, lastShownId, random)
+            pickNext(deck.items, progress, s.threshold, lastShownId, random)
         }
         _currentCard.value = next
         _currentQuiz.value = next?.let { buildQuiz(it, deck, random) }
@@ -173,7 +186,7 @@ class AppViewModel(private val store: ProgressStore) : ViewModel() {
         return hw.isEmpty() || activityId in hw
     }
 
-    /** Kid mode: correct tap. Advances; feeds the star bank when the deck is homework. */
+    /** Quiz: correct tap. Advances quiz progress; feeds the star bank when the deck is homework. */
     fun quizCorrect() {
         val card = _currentCard.value ?: return
         val deckId = _openDeckId.value
@@ -181,12 +194,12 @@ class AppViewModel(private val store: ProgressStore) : ViewModel() {
         val today = LocalDate.now().toEpochDay()
         val s = state.value
         val earns = earnsStars(deckId)
-        // Does this correct answer push the whole deck over the line?
+        // Does this correct answer push the whole quiz deck over the line?
         val completesDeck = deck != null && !_reviewMode.value &&
-            (s.progress[card.id]?.correctCount ?: 0) + 1 >= s.threshold &&
-            deck.items.all { it.id == card.id || isMastered(s.progress[it.id], s.threshold) }
+            (s.quizProgress[card.id]?.correctCount ?: 0) + 1 >= s.threshold &&
+            deck.items.all { it.id == card.id || isMastered(s.quizProgress[it.id], s.threshold) }
         viewModelScope.launch {
-            store.updateItem(card.id) { applyCorrect(it, today) }
+            store.updateQuizItem(card.id) { applyCorrect(it, today) }
             if (earns) {
                 store.recordKidCorrect(CORRECTS_PER_STAR)
                 if (completesDeck) store.addStars(1)
@@ -195,14 +208,13 @@ class AppViewModel(private val store: ProgressStore) : ViewModel() {
         }
     }
 
-    /** Kid mode: wrong tap. Walks mastery back once per card; card stays up for retry. */
-    fun quizWrong() {
-        if (wrongAlreadyThisCard) return
-        wrongAlreadyThisCard = true
+    /** Quiz: wrong tap, after the correct answer was revealed. Records and moves on. */
+    fun quizWrongAdvance() {
         val card = _currentCard.value ?: return
         val today = LocalDate.now().toEpochDay()
         viewModelScope.launch {
-            store.updateItem(card.id) { applyWrong(it, today) }
+            store.updateQuizItem(card.id) { applyWrong(it, today) }
+            advance(lastShownId = card.id)
         }
     }
 
