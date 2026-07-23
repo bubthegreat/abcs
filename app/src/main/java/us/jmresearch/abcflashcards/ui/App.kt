@@ -1136,6 +1136,13 @@ private fun ParentScreen(vm: AppViewModel, state: AppState, audio: AudioBox, onC
     birthdayTarget?.let { target ->
         val pickerState = androidx.compose.material3.rememberDatePickerState(
             initialSelectedDateMillis = target.birthdayEpochDay?.let { it * 86_400_000L },
+            selectableDates = object : androidx.compose.material3.SelectableDates {
+                override fun isSelectableDate(utcTimeMillis: Long): Boolean =
+                    utcTimeMillis <= System.currentTimeMillis()
+
+                override fun isSelectableYear(year: Int): Boolean =
+                    year <= java.time.LocalDate.now().year
+            },
         )
         androidx.compose.material3.DatePickerDialog(
             onDismissRequest = { birthdayTarget = null },
