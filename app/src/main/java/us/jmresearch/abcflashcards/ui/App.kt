@@ -372,10 +372,23 @@ private fun QuizScreen(vm: AppViewModel, state: AppState, audio: AudioBox, sound
         modifier = Modifier.fillMaxSize().padding(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
+        var showReset by remember { mutableStateOf(false) }
+        if (showReset && status != null) {
+            AlertDialog(
+                onDismissRequest = { showReset = false },
+                title = { Text("Reset ${status.deck.title} quiz?") },
+                text = { Text("Quiz progress for this deck goes back to zero. Flashcard progress and earned stars are not touched.") },
+                confirmButton = {
+                    TextButton(onClick = { vm.resetDeckQuiz(status.deck.id); showReset = false }) { Text("Reset") }
+                },
+                dismissButton = { TextButton(onClick = { showReset = false }) { Text("Cancel") } },
+            )
+        }
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
             TextButton(onClick = onClose) { Text("← Back", fontSize = 18.sp) }
             Spacer(Modifier.weight(1f))
             Text("⭐ ${state.starBank}  ·  ${state.starProgress}/$CORRECTS_PER_STAR", fontSize = 16.sp)
+            TextButton(onClick = { showReset = true }) { Text("↺ Reset", fontSize = 15.sp) }
         }
         Box(
             modifier = Modifier.fillMaxWidth().weight(1f),
@@ -707,11 +720,24 @@ private fun DeckScreen(vm: AppViewModel, state: AppState, audio: AudioBox, onClo
         modifier = Modifier.fillMaxSize().padding(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
+        var showReset by remember { mutableStateOf(false) }
+        if (showReset && status != null) {
+            AlertDialog(
+                onDismissRequest = { showReset = false },
+                title = { Text("Reset ${status.deck.title} flashcards?") },
+                text = { Text("Flashcard progress for this deck goes back to zero. Quiz progress is not touched.") },
+                confirmButton = {
+                    TextButton(onClick = { vm.resetDeckLearning(status.deck.id); showReset = false }) { Text("Reset") }
+                },
+                dismissButton = { TextButton(onClick = { showReset = false }) { Text("Cancel") } },
+            )
+        }
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
             TextButton(onClick = onClose) { Text("← Back", fontSize = 18.sp) }
             Spacer(Modifier.weight(1f))
             if (status != null) {
                 Text("${status.masteredCount}/${status.total} ⭐", fontSize = 16.sp)
+                TextButton(onClick = { showReset = true }) { Text("↺ Reset", fontSize = 15.sp) }
             }
         }
         if (status != null) {
@@ -970,7 +996,6 @@ private fun ProfileDialog(
 
 @Composable
 private fun ParentScreen(vm: AppViewModel, state: AppState, audio: AudioBox, onClose: () -> Unit) {
-    var resetTarget by remember { mutableStateOf<DeckStatus?>(null) }
     var deleteTarget by remember { mutableStateOf<us.jmresearch.abcflashcards.data.Profile?>(null) }
     var renameTarget by remember { mutableStateOf<us.jmresearch.abcflashcards.data.Profile?>(null) }
     var showResetAll by remember { mutableStateOf(false) }
@@ -1012,20 +1037,6 @@ private fun ParentScreen(vm: AppViewModel, state: AppState, audio: AudioBox, onC
             },
             dismissButton = {
                 TextButton(onClick = { renameTarget = null }) { Text("Cancel") }
-            },
-        )
-    }
-
-    resetTarget?.let { target ->
-        AlertDialog(
-            onDismissRequest = { resetTarget = null },
-            title = { Text("Reset ${target.deck.title}?") },
-            text = { Text("All progress in this deck will be erased for the current kid. This cannot be undone.") },
-            confirmButton = {
-                TextButton(onClick = { vm.resetDeck(target.deck.id); resetTarget = null }) { Text("Reset") }
-            },
-            dismissButton = {
-                TextButton(onClick = { resetTarget = null }) { Text("Cancel") }
             },
         )
     }
@@ -1156,7 +1167,6 @@ private fun ParentScreen(vm: AppViewModel, state: AppState, audio: AudioBox, onC
                 Row(modifier = Modifier.fillMaxWidth()) {
                     Spacer(Modifier.weight(1f))
                     Text("Homework", fontSize = 13.sp, color = Color.Gray, textAlign = TextAlign.Center, modifier = Modifier.width(100.dp))
-                    Text("Reset", fontSize = 13.sp, color = Color.Gray, textAlign = TextAlign.Center, modifier = Modifier.width(80.dp))
                     Text("Lock", fontSize = 13.sp, color = Color.Gray, textAlign = TextAlign.Center, modifier = Modifier.width(90.dp))
                 }
             }
@@ -1189,9 +1199,6 @@ private fun ParentScreen(vm: AppViewModel, state: AppState, audio: AudioBox, onC
                                 onChange = { vm.setHomeworkReward(status.deck.id, it) },
                             )
                         }
-                    }
-                    Box(modifier = Modifier.width(80.dp), contentAlignment = Alignment.Center) {
-                        TextButton(onClick = { resetTarget = status }) { Text("Reset") }
                     }
                     Box(modifier = Modifier.width(90.dp), contentAlignment = Alignment.Center) {
                         when {

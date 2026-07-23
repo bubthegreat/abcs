@@ -98,12 +98,18 @@ class ProgressStore(private val context: Context) {
         }
     }
 
-    suspend fun resetDeck(itemIds: List<String>) {
+    suspend fun resetDeckLearning(itemIds: List<String>) {
         context.dataStore.edit { prefs ->
             val pid = activePid(prefs)
             val map = decodeProgress(rawProgress(prefs, pid)).toMutableMap()
             itemIds.forEach { map.remove(it) }
             prefs[progressKey(pid)] = encodeProgress(map)
+        }
+    }
+
+    suspend fun resetDeckQuiz(itemIds: List<String>) {
+        context.dataStore.edit { prefs ->
+            val pid = activePid(prefs)
             val quizMap = decodeProgress(prefs[quizProgressKey(pid)] ?: "").toMutableMap()
             itemIds.forEach { quizMap.remove(it) }
             prefs[quizProgressKey(pid)] = encodeProgress(quizMap)

@@ -263,9 +263,28 @@ class AppViewModel(private val store: ProgressStore) : ViewModel() {
         }
     }
 
-    fun resetDeck(deckId: String) {
+    fun resetDeckLearning(deckId: String) {
         val deck = deckById(deckId) ?: return
-        viewModelScope.launch { store.resetDeck(deck.items.map { it.id }) }
+        viewModelScope.launch {
+            store.resetDeckLearning(deck.items.map { it.id })
+            refreshOpenDeck(deckId)
+        }
+    }
+
+    fun resetDeckQuiz(deckId: String) {
+        val deck = deckById(deckId) ?: return
+        viewModelScope.launch {
+            store.resetDeckQuiz(deck.items.map { it.id })
+            refreshOpenDeck(deckId)
+        }
+    }
+
+    /** After an in-deck reset, deal a fresh card once the cleared progress lands. */
+    private suspend fun refreshOpenDeck(deckId: String) {
+        if (_openDeckId.value != deckId) return
+        kotlinx.coroutines.delay(100)
+        _reviewMode.value = false
+        advance(lastShownId = null)
     }
 
     fun resetAll() {
