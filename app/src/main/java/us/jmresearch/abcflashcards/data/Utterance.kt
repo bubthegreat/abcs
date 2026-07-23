@@ -51,6 +51,11 @@ fun utteranceFor(item: CardItem, deck: Deck): String = when (deck.subject) {
             .replace("−", "minus")
             .replace("×", "times")
             .replace("÷", "divided by")
+            .replace("=", "equals")
+            .replace("1/2", "one half")
+            .replace("1/3", "one third")
+            .replace("1/4", "one quarter")
+            .replace("3/4", "three quarters")
             .replace(Regex("\\s+"), " ")
             .trim()
     }

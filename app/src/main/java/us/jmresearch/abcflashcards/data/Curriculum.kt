@@ -164,11 +164,33 @@ object Curriculum {
             unlockRule = UnlockRule.DecksMastered(listOf("addition", "subtraction")),
         ))
         add(Deck(
-            id = "division", title = "Sharing", subject = Subject.MATH,
+            id = "division", title = "Division", subject = Subject.MATH,
             items = buildList {
                 for (b in 1..5) for (q in 1..5) add(CardItem("div_${b * q}_$b", "${b * q} ÷ $b", "$q"))
             }.distinctBy { it.id },
             unlockRule = UnlockRule.DecksMastered(listOf("multiplication")),
+        ))
+        add(Deck(
+            id = "fractions", title = "Fractions", subject = Subject.MATH,
+            items = buildList {
+                for (w in listOf(2, 4, 6, 8, 10)) add(CardItem("frac_1_2_$w", "1/2 of $w", "${w / 2}"))
+                for (w in listOf(3, 6, 9, 12)) add(CardItem("frac_1_3_$w", "1/3 of $w", "${w / 3}"))
+                for (w in listOf(4, 8, 12)) add(CardItem("frac_1_4_$w", "1/4 of $w", "${w / 4}"))
+                for (w in listOf(4, 8, 12)) add(CardItem("frac_3_4_$w", "3/4 of $w", "${w * 3 / 4}"))
+            },
+            unlockRule = UnlockRule.DecksMastered(listOf("division")),
+        ))
+        add(Deck(
+            id = "algebra", title = "Algebra", subject = Subject.MATH,
+            items = buildList {
+                for (a in 1..3) for (x in 1..5) {
+                    val b = ((a + x) % 4) + 1
+                    val c = a * x + b
+                    val left = if (a == 1) "x + $b" else "${a}x + $b"
+                    add(CardItem("alg_${a}_${b}_$x", "$left = $c", "x = $x"))
+                }
+            },
+            unlockRule = UnlockRule.DecksMastered(listOf("fractions")),
         ))
     }
 }

@@ -25,6 +25,7 @@ class CurriculumTest {
             "letters_1", "letters_2", "letters_3", "letters_4", "letters_5", "letters_review",
             "cvc_1", "cvc_2", "cvc_3", "sight_1", "phrases_1", "phrases_2",
             "numbers", "counting", "addition", "subtraction", "multiplication", "division",
+            "fractions", "algebra",
             "colors", "shapes", "shapes_2", "colors_shapes",
         )
         expected.forEach { id -> assertTrue("missing deck $id", decks.any { it.id == id }) }
@@ -85,6 +86,16 @@ class CurriculumTest {
             assertEquals(0, a % b)
             assertEquals((a / b).toString(), it.back)
         }
+        deck("fractions").items.forEach {
+            val (n, d, w) = it.id.removePrefix("frac_").split("_").map(String::toInt)
+            assertEquals(0, (w * n) % d)
+            assertEquals((w * n / d).toString(), it.back)
+        }
+        deck("algebra").items.forEach {
+            val (a, b, x) = it.id.removePrefix("alg_").split("_").map(String::toInt)
+            assertEquals("x = $x", it.back)
+            assertTrue("front must show the equation", it.front.endsWith("= ${a * x + b}"))
+        }
     }
 
     @Test fun unlockChainMatchesSpec() {
@@ -98,6 +109,8 @@ class CurriculumTest {
         assertEquals(UnlockRule.DecksMastered(listOf("numbers")), rule("counting"))
         assertEquals(UnlockRule.DecksMastered(listOf("addition", "subtraction")), rule("multiplication"))
         assertEquals(UnlockRule.DecksMastered(listOf("multiplication")), rule("division"))
+        assertEquals(UnlockRule.DecksMastered(listOf("division")), rule("fractions"))
+        assertEquals(UnlockRule.DecksMastered(listOf("fractions")), rule("algebra"))
         assertEquals(UnlockRule.None, rule("colors"))
         assertEquals(UnlockRule.None, rule("shapes"))
         assertEquals(UnlockRule.DecksMastered(listOf("shapes")), rule("shapes_2"))
