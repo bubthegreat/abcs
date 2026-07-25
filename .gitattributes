@@ -1,0 +1,19 @@
+# The Gradle wrapper runs inside the Linux build container, so it must keep LF
+# endings even when checked out on Windows with core.autocrlf=true. With CRLF
+# the container fails at the shebang: /usr/bin/env: 'sh\r': No such file.
+gradlew text eol=lf
+*.sh text eol=lf
+
+# Windows-only scripts stay CRLF.
+gradlew.bat text eol=crlf
+*.bat text eol=crlf
+
+# Never munge line endings in binaries.
+*.jar binary
+*.apk binary
+*.keystore binary
+*.png binary
+*.jpg binary
+*.webp binary
+*.mp3 binary
+*.ogg binary
