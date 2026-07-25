@@ -384,7 +384,8 @@ class SoundBox {
             track.notificationMarkerPosition = pcm.size
             track.setPlaybackPositionUpdateListener(object : AudioTrack.OnPlaybackPositionUpdateListener {
                 override fun onMarkerReached(t: AudioTrack?) {
-                    nextSong()
+                    // Ignore markers from a track we've already swapped out.
+                    if (t === musicTrack) nextSong()
                 }
                 override fun onPeriodicNotification(t: AudioTrack?) {}
             })
@@ -393,11 +394,23 @@ class SoundBox {
         }
     }
 
+    /** Immediately silence a track (pause+flush discards queued audio) and free it. */
+    private fun stopAndRelease(track: AudioTrack) {
+        try {
+            track.setPlaybackPositionUpdateListener(null)
+            track.pause()
+            track.flush()
+        } catch (_: IllegalStateException) {
+            // Track already uninitialized; release below is all that's left.
+        }
+        track.release()
+    }
+
     /** Switch to the next chiptune, keeping volume and play state. */
     fun nextSong(): String {
-        songIndex = (songIndex + 1) % songs.size
-        musicTrack?.release()
+        musicTrack?.let { stopAndRelease(it) }
         musicTrack = null
+        songIndex = (songIndex + 1) % songs.size
         startMusic()
         return currentSongName
     }
@@ -454,7 +467,7 @@ class SoundBox {
     )
 
     fun shutdown() {
-        musicTrack?.release()
+        musicTrack?.let { stopAndRelease(it) }
         musicTrack = null
         liveEffects.forEach { it.release() }
         liveEffects.clear()
