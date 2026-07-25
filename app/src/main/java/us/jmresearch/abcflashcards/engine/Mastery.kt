@@ -10,6 +10,23 @@ fun applyCorrect(p: ItemProgress, today: Long): ItemProgress =
 fun applyWrong(p: ItemProgress, today: Long): ItemProgress =
     p.copy(correctCount = (p.correctCount - 1).coerceAtLeast(0), lastSeenEpochDay = today)
 
+/**
+ * Quiz wrong: break the streak so mastery means "threshold right in a row".
+ *
+ * Plain -1 let a guesser grind: the floor at zero is a reflecting barrier, so a
+ * random walk with negative drift still reached the threshold given enough taps.
+ *
+ * A card already at or above threshold only steps back one instead of resetting.
+ * Cards don't decay, so a mastered card can resurface, and deck completion needs
+ * every card mastered at once — without this, one unlucky tap on a card the kid
+ * genuinely knows could un-complete a finished deck.
+ */
+fun applyQuizWrong(p: ItemProgress, today: Long, threshold: Int): ItemProgress =
+    p.copy(
+        correctCount = if (p.correctCount >= threshold) (threshold - 1).coerceAtLeast(0) else 0,
+        lastSeenEpochDay = today,
+    )
+
 fun isMastered(p: ItemProgress?, threshold: Int): Boolean =
     p != null && p.correctCount >= threshold
 

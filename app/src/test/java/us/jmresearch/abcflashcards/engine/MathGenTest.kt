@@ -55,7 +55,7 @@ class MathGenTest {
         repeat(50) { seed ->
             val card = genMathCard(MathOp.TABLES, "times_tables", Random(seed))
             val quiz = buildGeneratedQuiz(card, Random(seed))
-            assertEquals(3, quiz.choices.size)
+            assertEquals(QUIZ_DISTRACTORS + 1, quiz.choices.size)
             assertEquals(quiz.choices.size, quiz.choices.toSet().size)
             assertTrue(quiz.choices.contains(card.back))
             assertEquals(card.back, quiz.answer)

@@ -22,6 +22,7 @@ import us.jmresearch.abcflashcards.data.Profile
 import us.jmresearch.abcflashcards.data.ProgressStore
 import us.jmresearch.abcflashcards.engine.Quiz
 import us.jmresearch.abcflashcards.engine.applyCorrect
+import us.jmresearch.abcflashcards.engine.applyQuizWrong
 import us.jmresearch.abcflashcards.engine.applyWrong
 import us.jmresearch.abcflashcards.engine.buildQuiz
 import us.jmresearch.abcflashcards.engine.isDeckUnlocked
@@ -332,18 +333,22 @@ class AppViewModel(private val store: ProgressStore) : ViewModel() {
     fun quizWrongAdvance() {
         if (!quizSession) return
         val card = _currentCard.value ?: return
+        val deckId = _openDeckId.value
+        val deck = deckById(deckId)
         val today = LocalDate.now().toEpochDay()
-        val generated = isGeneratedSession()
         val s = state.value
+        val itemThreshold = deck?.let {
+            us.jmresearch.abcflashcards.engine.deckItemThreshold(it, s.threshold)
+        } ?: s.threshold
+        // Mirrors the credit gate in quizCorrect: a wrong answer must never burn
+        // star progress that a correct one could not have earned.
+        val counts = earnsStars(deckId) && !_reviewMode.value
         val updated = s.quizProgress + (
-            card.id to (s.quizProgress[card.id] ?: ItemProgress()).let {
-                if (generated) it.copy(correctCount = 0, lastSeenEpochDay = today) else applyWrong(it, today)
-            }
+            card.id to applyQuizWrong(s.quizProgress[card.id] ?: ItemProgress(), today, itemThreshold)
             )
         viewModelScope.launch {
-            store.updateQuizItem(card.id) {
-                if (generated) it.copy(correctCount = 0, lastSeenEpochDay = today) else applyWrong(it, today)
-            }
+            store.updateQuizItem(card.id) { applyQuizWrong(it, today, itemThreshold) }
+            if (counts) store.recordKidWrong()
             advance(lastShownId = card.id, freshProgress = updated)
         }
     }

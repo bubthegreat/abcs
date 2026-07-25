@@ -9,6 +9,9 @@ import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.map
+import us.jmresearch.abcflashcards.engine.StarDrip
+import us.jmresearch.abcflashcards.engine.dripCorrect
+import us.jmresearch.abcflashcards.engine.dripWrong
 
 private val Context.dataStore by preferencesDataStore(name = "progress")
 
@@ -273,20 +276,26 @@ class ProgressStore(private val context: Context) {
 
     val kidMode: Flow<Boolean> = safeData.map { it[kidModeKey] == "on" }
 
-    /** One correct answer in kid mode. Every [correctsPerStar] corrects banks a star. */
-    suspend fun recordKidCorrect(correctsPerStar: Int = 10) {
+    /** Read, apply a drip rule, and write back. Rules live in engine/StarDrip.kt. */
+    private suspend fun editDrip(rule: (StarDrip) -> StarDrip) {
         context.dataStore.edit { prefs ->
             val pid = activePid(prefs)
-            val progress = (prefs[starProgressKey(pid)]?.toIntOrNull() ?: 0) + 1
-            if (progress >= correctsPerStar) {
-                val bank = prefs[starBankKey(pid)]?.toIntOrNull() ?: 0
-                prefs[starBankKey(pid)] = (bank + 1).toString()
-                prefs[starProgressKey(pid)] = "0"
-            } else {
-                prefs[starProgressKey(pid)] = progress.toString()
-            }
+            val before = StarDrip(
+                progress = prefs[starProgressKey(pid)]?.toIntOrNull() ?: 0,
+                bank = prefs[starBankKey(pid)]?.toIntOrNull() ?: 0,
+            )
+            val after = rule(before)
+            prefs[starProgressKey(pid)] = after.progress.toString()
+            if (after.bank != before.bank) prefs[starBankKey(pid)] = after.bank.toString()
         }
     }
+
+    /** One correct answer in kid mode. Every [correctsPerStar] corrects banks a star. */
+    suspend fun recordKidCorrect(correctsPerStar: Int = 10) =
+        editDrip { dripCorrect(it, correctsPerStar) }
+
+    /** One wrong answer in kid mode. Steps the drip back so guessing cannot accumulate. */
+    suspend fun recordKidWrong() = editDrip(::dripWrong)
 
     suspend fun addStars(count: Int) {
         context.dataStore.edit { prefs ->

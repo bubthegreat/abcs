@@ -19,6 +19,13 @@ data class Quiz(
     val answer: String,
 )
 
+/**
+ * Wrong answers offered alongside the right one. Three (a four-way choice) drops
+ * a blind guess from 1-in-3 to 1-in-4. Decks too small to supply this many fall
+ * back to however many they can — take() degrades on its own.
+ */
+const val QUIZ_DISTRACTORS = 3
+
 fun buildQuiz(target: CardItem, deck: Deck, random: Random): Quiz {
     val quizOnBack = target.back != null
     val answer = if (quizOnBack) target.back!! else target.front
@@ -27,7 +34,7 @@ fun buildQuiz(target: CardItem, deck: Deck, random: Random): Quiz {
 
     // Distractor pool: same deck first; same subject if the deck is too small.
     val sameDeck = deck.items.filter { it.id != target.id }
-    val pool = if (sameDeck.size >= 2) sameDeck else {
+    val pool = if (sameDeck.size >= QUIZ_DISTRACTORS) sameDeck else {
         Curriculum.decks
             .filter { it.subject == deck.subject }
             .flatMap { it.items }
@@ -39,7 +46,7 @@ fun buildQuiz(target: CardItem, deck: Deck, random: Random): Quiz {
         .distinct()
         .filter { it != answer }
         .shuffled(random)
-        .take(2)
+        .take(QUIZ_DISTRACTORS)
 
     return Quiz(
         item = target,

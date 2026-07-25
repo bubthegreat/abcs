@@ -16,7 +16,7 @@ class QuizTest {
         val target = d.items.first()
         repeat(20) { seed ->
             val q = buildQuiz(target, d, Random(seed))
-            assertEquals(3, q.choices.size)
+            assertEquals(QUIZ_DISTRACTORS + 1, q.choices.size)
             assertEquals(1, q.choices.count { it == q.answer })
             assertEquals(target.front, q.answer)
             assertEquals(q.choices.size, q.choices.toSet().size) // no duplicate choices
@@ -33,7 +33,7 @@ class QuizTest {
             assertEquals("1/2 of 8", q.visualPrompt)
             assertEquals("4", q.answer)
             assertTrue(q.choices.contains("4"))
-            assertEquals(3, q.choices.size)
+            assertEquals(QUIZ_DISTRACTORS + 1, q.choices.size)
             assertEquals(q.choices.size, q.choices.toSet().size)
         }
     }
@@ -42,8 +42,26 @@ class QuizTest {
         val d = deck("letters_5") // only "Qu qu"
         val target = d.items.first()
         val q = buildQuiz(target, d, Random(1))
-        assertEquals(3, q.choices.size)
+        assertEquals(QUIZ_DISTRACTORS + 1, q.choices.size)
         assertTrue(q.choices.contains(target.front))
+    }
+
+    /**
+     * Every card in every static deck must build a sane quiz. Decks that cannot
+     * supply a full set of distractors fall back to fewer choices rather than
+     * crashing or repeating the answer.
+     */
+    @Test fun everyCardBuildsASaneQuiz() {
+        Curriculum.decks.filter { it.generator == null }.forEach { d ->
+            d.items.forEach { target ->
+                val q = buildQuiz(target, d, Random(7))
+                val where = "${d.id}/${target.id}"
+                assertTrue("$where: needs at least one distractor", q.choices.size >= 2)
+                assertTrue("$where: too many choices", q.choices.size <= QUIZ_DISTRACTORS + 1)
+                assertEquals("$where: answer must appear exactly once", 1, q.choices.count { it == q.answer })
+                assertEquals("$where: duplicate choices", q.choices.size, q.choices.toSet().size)
+            }
+        }
     }
 
     @Test fun choicesAreShuffledAcrossSeeds() {

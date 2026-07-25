@@ -41,7 +41,7 @@ fun genMathCard(op: MathOp, deckId: String, random: Random): CardItem {
 fun buildGeneratedQuiz(card: CardItem, random: Random): Quiz {
     val answer = card.back!!.toInt()
     val distractors = mutableSetOf<Int>()
-    while (distractors.size < 2) {
+    while (distractors.size < QUIZ_DISTRACTORS) {
         val offset = random.nextInt(1, 6) * (if (random.nextBoolean()) 1 else -1)
         val candidate = answer + offset
         if (candidate >= 0 && candidate != answer) distractors.add(candidate)
