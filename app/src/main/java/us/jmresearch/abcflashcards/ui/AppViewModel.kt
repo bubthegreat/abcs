@@ -84,12 +84,13 @@ private data class Core(
 private data class Profs(
     val profiles: List<Profile>,
     val activeId: String,
+    /** Lives here, not in KidBits, so it can never be paired with another kid's id. */
+    val bank: Int,
     val dailyLimits: Map<String, Int>,
     val dailyEarned: Map<String, Pair<Int, Long>>,
 )
 
 private data class KidBits(
-    val bank: Int,
     val starProgress: Int,
     val pin: String?,
     val musicVolume: Float,
@@ -110,11 +111,11 @@ class AppViewModel(private val store: ProgressStore) : ViewModel() {
                 store.forceUnlocked,
                 combine(store.homework, store.homeworkRewards) { h, r -> h to r },
             ) { (p, q), t, f, (h, r) -> Core(p, t, f, h, q, r) },
-            combine(store.profiles, store.activeProfileId, store.dailyLimits, store.dailyEarned) { pr, id, lim, earned ->
-                Profs(pr, id, lim, earned)
+            combine(store.profiles, store.activeProfileBank, store.dailyLimits, store.dailyEarned) { pr, (id, bank), lim, earned ->
+                Profs(pr, id, bank, lim, earned)
             },
-            combine(store.starBank, store.starProgress, store.parentPin, store.musicVolume, store.sfxVolume) { b, s, pin, mv, sv ->
-                KidBits(b, s, pin, mv, sv)
+            combine(store.starProgress, store.parentPin, store.musicVolume, store.sfxVolume) { s, pin, mv, sv ->
+                KidBits(s, pin, mv, sv)
             },
         ) { core, profs, kid ->
             val activeProfile = profs.profiles.firstOrNull { it.id == profs.activeId }
@@ -156,7 +157,7 @@ class AppViewModel(private val store: ProgressStore) : ViewModel() {
                 progress = core.progress,
                 profiles = profs.profiles,
                 activeProfileId = profs.activeId,
-                starBank = kid.bank,
+                starBank = profs.bank,
                 starProgress = kid.starProgress,
                 parentPin = kid.pin,
                 musicVolume = kid.musicVolume,

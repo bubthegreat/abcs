@@ -156,23 +156,40 @@ fun App(vm: AppViewModel, audio: AudioBox, ink: InkBox, sound: SoundBox) {
     // Star celebration whenever the bank grows, whatever screen we're on.
     // Baseline updates FIRST: if this effect restarts mid-celebration, the next
     // burst must show only the new delta, not the accumulated one.
-    // Keyed on the profile too: switching kids re-baselines instead of
-    // celebrating the difference between two kids' banks.
+    // Keyed on the profile too: switching kids reports the incoming balance
+    // instead of celebrating the difference between two kids' banks. The id and
+    // bank arrive as one value from the store, so this can't see a torn pair.
     androidx.compose.runtime.LaunchedEffect(state.activeProfileId, state.starBank) {
+        val firstRun = lastBankProfile == null
         val sameKid = lastBankProfile == state.activeProfileId
         val previous = lastBank
         lastBankProfile = state.activeProfileId
         lastBank = state.starBank
-        if (sameKid && previous >= 0 && state.starBank > previous) {
-            burstAmount = state.starBank - previous
-            showStarBurst = true
-            sound.fanfare()
-            audio.play(
-                "star_earned",
-                if (burstAmount == 1) "You earned a star!" else "You earned $burstAmount stars!",
-            )
-            kotlinx.coroutines.delay(2200)
-            showStarBurst = false
+        when {
+            // Switching kids: report the incoming balance. These stars already
+            // belonged to this kid, so it's "you have", not "you earned", and
+            // there's no fanfare or burst — nothing was just won.
+            !sameKid -> if (!firstRun) {
+                audio.play(
+                    "star_total",
+                    when (state.starBank) {
+                        0 -> "You have no stars yet."
+                        1 -> "You have 1 star."
+                        else -> "You have ${state.starBank} stars."
+                    },
+                )
+            }
+            previous >= 0 && state.starBank > previous -> {
+                burstAmount = state.starBank - previous
+                showStarBurst = true
+                sound.fanfare()
+                audio.play(
+                    "star_earned",
+                    if (burstAmount == 1) "You earned a star!" else "You earned $burstAmount stars!",
+                )
+                kotlinx.coroutines.delay(2200)
+                showStarBurst = false
+            }
         }
     }
 

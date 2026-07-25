@@ -62,7 +62,19 @@ class ProgressStore(private val context: Context) {
 
     val profiles: Flow<List<Profile>> = safeData.map { profilesOf(it) }
 
-    val activeProfileId: Flow<String> = safeData.map { activePid(it) }
+    /**
+     * The active profile id together with that profile's star bank, read from a
+     * single preferences snapshot.
+     *
+     * These must travel as one value. Exposed as two flows, combine() pairs the
+     * new kid's id with the previous kid's bank for one emission on every
+     * switch — which flashed the wrong star count on screen and made the star
+     * celebration announce the incoming kid's whole balance as freshly earned.
+     */
+    val activeProfileBank: Flow<Pair<String, Int>> = safeData.map { prefs ->
+        val pid = activePid(prefs)
+        pid to (prefs[starBankKey(pid)]?.toIntOrNull() ?: 0)
+    }
 
     val progress: Flow<Map<String, ItemProgress>> = safeData.map { prefs ->
         decodeProgress(rawProgress(prefs, activePid(prefs)))
@@ -239,10 +251,6 @@ class ProgressStore(private val context: Context) {
         context.dataStore.edit { prefs ->
             prefs[starProgressKey(activePid(prefs))] = "0"
         }
-    }
-
-    val starBank: Flow<Int> = safeData.map { prefs ->
-        prefs[starBankKey(activePid(prefs))]?.toIntOrNull() ?: 0
     }
 
     val starProgress: Flow<Int> = safeData.map { prefs ->
