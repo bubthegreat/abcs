@@ -134,7 +134,7 @@ class ProgressStore(private val context: Context) {
         }
     }
 
-    /** Deck ids (plus the special "writing" id) mom assigned as homework. Empty = everything earns stars. */
+    /** Deck ids (plus the special "writing" id) assigned as homework. Only assigned activities earn stars; empty = nothing earns. */
     val homework: Flow<Set<String>> = safeData.map { prefs ->
         (prefs[homeworkKey(activePid(prefs))] ?: "")
             .split(";").filter { it.isNotBlank() }.toSet()
@@ -348,10 +348,19 @@ class ProgressStore(private val context: Context) {
             val remaining = current.filterNot { it.id == id }
             prefs[profilesKey] = encodeProfiles(remaining)
             if (activePid(prefs) == id) prefs[activeProfileKey] = remaining.first().id
+            // Remove ALL per-profile keys: profile ids are reused (p3 deleted,
+            // next added kid is p3 again), so leftovers would hand the new kid
+            // the old kid's star bank and homework.
             prefs.remove(progressKey(id))
             prefs.remove(quizProgressKey(id))
             prefs.remove(thresholdKey(id))
             prefs.remove(forceUnlockedKey(id))
+            prefs.remove(starBankKey(id))
+            prefs.remove(starProgressKey(id))
+            prefs.remove(homeworkKey(id))
+            prefs.remove(homeworkRewardsKey(id))
+            prefs.remove(dailyLimitKey(id))
+            prefs.remove(dailyEarnedKey(id))
             if (id == DEFAULT_PROFILE_ID) {
                 prefs.remove(legacyProgressKey)
                 prefs.remove(legacyThresholdKey)
