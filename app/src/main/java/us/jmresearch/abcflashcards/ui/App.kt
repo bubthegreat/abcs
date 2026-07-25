@@ -56,7 +56,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import kotlinx.coroutines.launch
 import us.jmresearch.abcflashcards.data.Subject
 
 private val subjectColors = mapOf(
@@ -152,14 +151,19 @@ fun App(vm: AppViewModel, audio: AudioBox, ink: InkBox, sound: SoundBox) {
     var showStarBurst by remember { mutableStateOf(false) }
     var burstAmount by remember { mutableStateOf(1) }
     var lastBank by remember { mutableStateOf(-1) }
+    var lastBankProfile by remember { mutableStateOf<String?>(null) }
 
     // Star celebration whenever the bank grows, whatever screen we're on.
     // Baseline updates FIRST: if this effect restarts mid-celebration, the next
     // burst must show only the new delta, not the accumulated one.
-    androidx.compose.runtime.LaunchedEffect(state.starBank) {
+    // Keyed on the profile too: switching kids re-baselines instead of
+    // celebrating the difference between two kids' banks.
+    androidx.compose.runtime.LaunchedEffect(state.activeProfileId, state.starBank) {
+        val sameKid = lastBankProfile == state.activeProfileId
         val previous = lastBank
+        lastBankProfile = state.activeProfileId
         lastBank = state.starBank
-        if (previous >= 0 && state.starBank > previous) {
+        if (sameKid && previous >= 0 && state.starBank > previous) {
             burstAmount = state.starBank - previous
             showStarBurst = true
             sound.fanfare()
@@ -181,7 +185,7 @@ fun App(vm: AppViewModel, audio: AudioBox, ink: InkBox, sound: SoundBox) {
                 ink = ink,
                 sound = sound,
                 onDeckTap = { deckId, quiz ->
-                    vm.openDeck(deckId)
+                    vm.openDeck(deckId, quiz)
                     screen = if (quiz) "quiz" else "cards"
                 },
                 onParentOpen = { screen = "parent" },
@@ -352,6 +356,9 @@ private fun QuizScreen(vm: AppViewModel, state: AppState, audio: AudioBox, sound
     val reviewMode by vm.reviewMode.collectAsState()
     var wrongPicked by remember { mutableStateOf<String?>(null) }
     var flashCorrect by remember { mutableStateOf(false) }
+    // Fireworks key on their own counter: flashCorrect resets on advance, and an
+    // effect keyed on it would cancel the flight mid-air (frozen emojis on screen).
+    var burstId by remember { mutableStateOf(0) }
 
     val status = state.deckStatuses.firstOrNull { it.deck.id == openDeckId }
     val complete = status != null && status.quizMasteredCount == status.total && status.total > 0
@@ -373,8 +380,8 @@ private fun QuizScreen(vm: AppViewModel, state: AppState, audio: AudioBox, sound
     val burst = remember { androidx.compose.animation.core.Animatable(2f) }
 
     // Runs at screen level so it survives the answer buttons leaving composition.
-    androidx.compose.runtime.LaunchedEffect(flashCorrect) {
-        if (flashCorrect) {
+    androidx.compose.runtime.LaunchedEffect(burstId) {
+        if (burstId > 0) {
             confetti = List(8) {
                 Firework(
                     x0 = 0.05f + kotlin.random.Random.nextFloat() * 0.8f,
@@ -383,13 +390,16 @@ private fun QuizScreen(vm: AppViewModel, state: AppState, audio: AudioBox, sound
                     emoji = listOf("🎉", "⭐", "🎊", "✨").random(),
                 )
             }
-            launch {
-                burst.snapTo(0f)
-                burst.animateTo(
-                    1.4f,
-                    androidx.compose.animation.core.tween(1600, easing = androidx.compose.animation.core.LinearEasing),
-                )
-            }
+            burst.snapTo(0f)
+            burst.animateTo(
+                1.4f,
+                androidx.compose.animation.core.tween(1600, easing = androidx.compose.animation.core.LinearEasing),
+            )
+        }
+    }
+
+    androidx.compose.runtime.LaunchedEffect(flashCorrect) {
+        if (flashCorrect) {
             kotlinx.coroutines.delay(900)
             vm.quizCorrect()
         }
@@ -436,8 +446,17 @@ private fun QuizScreen(vm: AppViewModel, state: AppState, audio: AudioBox, sound
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
             TextButton(onClick = onClose) { Text("← Back", fontSize = 18.sp) }
             Spacer(Modifier.weight(1f))
+            if (status != null) {
+                Text("🎯 ${status.quizMasteredCount}/${status.total}   ", fontSize = 16.sp)
+            }
             Text("⭐ ${state.starBank}  ·  ${state.starProgress}/$CORRECTS_PER_STAR", fontSize = 16.sp)
             TextButton(onClick = { showReset = true }) { Text("↺ Reset", fontSize = 15.sp) }
+        }
+        if (status != null && status.total > 0) {
+            LinearProgressIndicator(
+                progress = { status.quizMasteredCount.toFloat() / status.total },
+                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+            )
         }
         Box(
             modifier = Modifier.fillMaxWidth().weight(1f),
@@ -464,6 +483,27 @@ private fun QuizScreen(vm: AppViewModel, state: AppState, audio: AudioBox, sound
                 ) { Text("🔊", fontSize = 48.sp) }
             }
         }
+        if (q != null && status != null) {
+            // Same per-card mastery pips as flashcards, fed from the quiz track.
+            val itemThreshold = us.jmresearch.abcflashcards.engine.deckItemThreshold(status.deck, state.threshold)
+            val count = state.quizProgress[q.item.id]?.correctCount ?: 0
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                modifier = Modifier.padding(bottom = 12.dp),
+            ) {
+                repeat(itemThreshold) { i ->
+                    Box(
+                        modifier = Modifier
+                            .size(14.dp)
+                            .background(
+                                if (i < count) MaterialTheme.colorScheme.primary
+                                else MaterialTheme.colorScheme.primary.copy(alpha = 0.2f),
+                                CircleShape,
+                            ),
+                    )
+                }
+            }
+        }
         if (q != null) {
             Row(
                 modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp),
@@ -483,6 +523,7 @@ private fun QuizScreen(vm: AppViewModel, state: AppState, audio: AudioBox, sound
                             sound.click()
                             if (isAnswer) {
                                 flashCorrect = true
+                                burstId++
                                 sound.correct()
                                 audio.play("praise", listOf("Great job!", "You got it!", "Awesome!").random())
                             } else {

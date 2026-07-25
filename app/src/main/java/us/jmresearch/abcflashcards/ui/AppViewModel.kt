@@ -237,7 +237,12 @@ class AppViewModel(private val store: ProgressStore) : ViewModel() {
         advance(lastShownId = _currentCard.value?.id)
     }
 
-    private fun advance(lastShownId: String?) {
+    /**
+     * [freshProgress] carries the progress map that includes a write still in
+     * flight to DataStore — state.value lags the write, and picking from the
+     * stale map deals a just-mastered card right back out.
+     */
+    private fun advance(lastShownId: String?, freshProgress: Map<String, ItemProgress>? = null) {
         val deck = deckById(_openDeckId.value) ?: return
         val s = state.value
         if (deck.generator != null) {
@@ -247,7 +252,7 @@ class AppViewModel(private val store: ProgressStore) : ViewModel() {
             _quizNonce.value++
             return
         }
-        val progress = if (quizSession) s.quizProgress else s.progress
+        val progress = freshProgress ?: if (quizSession) s.quizProgress else s.progress
         val next = if (_reviewMode.value) {
             // Review of a mastered deck: uniform random over the whole deck, so it
             // doesn't ping-pong between the two oldest-seen items.
@@ -275,9 +280,11 @@ class AppViewModel(private val store: ProgressStore) : ViewModel() {
             } else {
                 transform
             }
+        val updated = state.value.progress +
+            (card.id to effective(state.value.progress[card.id] ?: ItemProgress(), today))
         viewModelScope.launch {
             store.updateItem(card.id) { effective(it, today) }
-            advance(lastShownId = card.id)
+            advance(lastShownId = card.id, freshProgress = updated)
         }
     }
 
@@ -307,6 +314,8 @@ class AppViewModel(private val store: ProgressStore) : ViewModel() {
         val completesDeck = deck != null && !_reviewMode.value &&
             (s.quizProgress[card.id]?.correctCount ?: 0) + 1 >= itemThreshold &&
             deck.items.all { it.id == card.id || isMastered(s.quizProgress[it.id], itemThreshold) }
+        val updated = s.quizProgress +
+            (card.id to applyCorrect(s.quizProgress[card.id] ?: ItemProgress(), today))
         viewModelScope.launch {
             store.updateQuizItem(card.id) { applyCorrect(it, today) }
             if (earns && cardUnmastered) store.recordKidCorrect(CORRECTS_PER_STAR)
@@ -314,7 +323,7 @@ class AppViewModel(private val store: ProgressStore) : ViewModel() {
                 store.addStars(s.rewardFor(deckId))
                 store.recordEarn(deckId, today)
             }
-            advance(lastShownId = card.id)
+            advance(lastShownId = card.id, freshProgress = updated)
         }
     }
 
@@ -324,11 +333,17 @@ class AppViewModel(private val store: ProgressStore) : ViewModel() {
         val card = _currentCard.value ?: return
         val today = LocalDate.now().toEpochDay()
         val generated = isGeneratedSession()
+        val s = state.value
+        val updated = s.quizProgress + (
+            card.id to (s.quizProgress[card.id] ?: ItemProgress()).let {
+                if (generated) it.copy(correctCount = 0, lastSeenEpochDay = today) else applyWrong(it, today)
+            }
+            )
         viewModelScope.launch {
             store.updateQuizItem(card.id) {
                 if (generated) it.copy(correctCount = 0, lastSeenEpochDay = today) else applyWrong(it, today)
             }
-            advance(lastShownId = card.id)
+            advance(lastShownId = card.id, freshProgress = updated)
         }
     }
 
@@ -380,6 +395,9 @@ class AppViewModel(private val store: ProgressStore) : ViewModel() {
 
     fun switchProfile(id: String) {
         closeDeck()
+        // A story in progress belongs to the kid who wrote it — never let the
+        // next kid finish it and collect the writing reward.
+        clearStory()
         viewModelScope.launch { store.switchProfile(id) }
     }
 
