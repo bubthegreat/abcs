@@ -11,6 +11,12 @@ import kotlin.math.sin
 private const val SAMPLE_RATE = 22050
 
 /**
+ * Backstop cap on retained effect tracks. Normal reclaim keeps this far lower;
+ * the cap only matters if a device reports a stalled playback head.
+ */
+private const val MAX_LIVE_EFFECTS = 8
+
+/**
  * All music and sound effects are synthesized — no audio assets to ship.
  * Music is a gentle looping pentatonic melody; effects are short tone runs.
  * Volumes are 0..1 and applied live.
@@ -20,7 +26,10 @@ class SoundBox {
     private var musicTrack: AudioTrack? = null
     private var musicVolume = 0.5f
     private var sfxVolume = 0.7f
-    private val liveEffects = mutableListOf<AudioTrack>()
+    /** A playing effect plus its length in frames, so we can tell when it has drained. */
+    private class LiveEffect(val track: AudioTrack, val frames: Int)
+
+    private val liveEffects = mutableListOf<LiveEffect>()
 
     // --- synthesis helpers ---
 
@@ -430,14 +439,44 @@ class SoundBox {
 
     // --- effects ---
 
+    /**
+     * Free effect tracks that have finished playing.
+     *
+     * A MODE_STATIC track keeps reporting PLAYSTATE_PLAYING after its buffer
+     * drains — it never stops itself — so "finished" has to be read off the
+     * playback head. Testing playState here instead leaked every blip until
+     * AudioFlinger refused to allocate ("could not create track, status: -12")
+     * and AudioTrack.Builder.build() threw, killing the app mid-quiz.
+     */
+    private fun reapFinishedEffects() {
+        liveEffects.removeAll { effect ->
+            val done = try {
+                effect.track.playbackHeadPosition >= effect.frames
+            } catch (_: IllegalStateException) {
+                true // already torn down; drop it
+            }
+            if (done) stopAndRelease(effect.track)
+            done
+        }
+    }
+
     private fun playEffect(pcm: ShortArray) {
         if (sfxVolume <= 0f) return
-        liveEffects.removeAll { t ->
-            (t.playState != AudioTrack.PLAYSTATE_PLAYING).also { done -> if (done) t.release() }
+        reapFinishedEffects()
+        while (liveEffects.size >= MAX_LIVE_EFFECTS) {
+            stopAndRelease(liveEffects.removeAt(0).track)
         }
-        val track = buildTrack(pcm, loop = false)
+        // The device can still refuse a track under audio pressure. A missing
+        // blip is not worth crashing on.
+        val track = try {
+            buildTrack(pcm, loop = false)
+        } catch (_: UnsupportedOperationException) {
+            return
+        } catch (_: IllegalStateException) {
+            return
+        }
         track.setVolume(sfxVolume)
-        liveEffects.add(track)
+        liveEffects.add(LiveEffect(track, pcm.size))
         track.play()
     }
 
@@ -469,7 +508,7 @@ class SoundBox {
     fun shutdown() {
         musicTrack?.let { stopAndRelease(it) }
         musicTrack = null
-        liveEffects.forEach { it.release() }
+        liveEffects.forEach { stopAndRelease(it.track) }
         liveEffects.clear()
     }
 }
