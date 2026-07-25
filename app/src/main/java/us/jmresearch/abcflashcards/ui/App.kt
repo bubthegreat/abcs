@@ -127,16 +127,29 @@ private data class Firework(
     val emoji: String,
 )
 
-private data class TabSpec(val subject: Subject?, val title: String, val emoji: String)
+/**
+ * A bottom-nav tab and the subjects it shows. A tab can gather several subjects:
+ * letters, words, phrases and language unlock into each other, so they read as
+ * one path rather than four tabs a kid has to hop between.
+ *
+ * Subjects stay distinct underneath. [Subject] also decides how a card is spoken
+ * and which pool a quiz draws distractors from, so collapsing the enum would make
+ * letters speak like words and let a letter card offer a whole sentence as a
+ * wrong answer. Grouping belongs here, in the navigation, not in the data.
+ *
+ * An empty set means the tab is not deck-backed (Writing has its own screen).
+ */
+private data class TabSpec(val subjects: Set<Subject>, val title: String, val emoji: String)
 
 private val tabs = listOf(
-    TabSpec(Subject.COLORS, "Colors", "🎨"),
-    TabSpec(Subject.LETTERS, "Letters", "🔤"),
-    TabSpec(Subject.WORDS, "Words", "📖"),
-    TabSpec(Subject.PHRASES, "Phrases", "💬"),
-    TabSpec(Subject.LANGUAGE, "Language", "📚"),
-    TabSpec(Subject.MATH, "Math", "🔢"),
-    TabSpec(null, "Writing", "✍️"),
+    TabSpec(setOf(Subject.COLORS), "Colors", "🎨"),
+    TabSpec(
+        setOf(Subject.LETTERS, Subject.WORDS, Subject.PHRASES, Subject.LANGUAGE),
+        "Reading",
+        "📖",
+    ),
+    TabSpec(setOf(Subject.MATH), "Math", "🔢"),
+    TabSpec(emptySet(), "Writing", "✍️"),
 )
 
 @Composable
@@ -693,10 +706,12 @@ private fun HomeScreen(
         bottomBar = {
             NavigationBar {
                 tabs.forEachIndexed { i, spec ->
-                    val hasHomework = if (spec.subject == null) {
+                    val hasHomework = if (spec.subjects.isEmpty()) {
                         WRITING_HOMEWORK_ID in state.homework
                     } else {
-                        state.deckStatuses.any { it.deck.subject == spec.subject && it.deck.id in state.homework }
+                        state.deckStatuses.any {
+                            it.deck.subject in spec.subjects && it.deck.id in state.homework
+                        }
                     }
                     NavigationBarItem(
                         selected = tab == i,
@@ -729,8 +744,7 @@ private fun HomeScreen(
                 onSoundTap = { showSound = true },
             )
             val spec = tabs[tab]
-            val subject = spec.subject
-            if (subject == null) {
+            if (spec.subjects.isEmpty()) {
                 if (WRITING_HOMEWORK_ID in state.homework) {
                     Text(
                         "🌟 Homework — stories earn stars!",
@@ -742,7 +756,9 @@ private fun HomeScreen(
                 }
                 WritingScreen(vm = vm, audio = audio, ink = ink)
             } else {
-                val decks = state.deckStatuses.filter { it.deck.subject == subject }
+                // Curriculum order already runs letters -> words -> phrases ->
+                // language, so the merged tab reads as the intended sequence.
+                val decks = state.deckStatuses.filter { it.deck.subject in spec.subjects }
                 LazyVerticalGrid(
                     columns = GridCells.Fixed(2),
                     modifier = Modifier.fillMaxSize().padding(horizontal = 12.dp),
@@ -752,7 +768,9 @@ private fun HomeScreen(
                     items(decks, key = { it.deck.id }) { status ->
                         DeckTile(
                             status,
-                            subjectColors.getValue(subject),
+                            // Per-deck, not per-tab: inside the merged Reading tab
+                            // this keeps the four strands visually distinct.
+                            subjectColors.getValue(status.deck.subject),
                             onDeckTap = { chooseDeck = status },
                             isHomework = status.deck.id in state.homework,
                         )
@@ -1324,15 +1342,17 @@ private fun ParentScreen(vm: AppViewModel, state: AppState, audio: AudioBox, onC
                         modifier = Modifier.padding(top = 16.dp, bottom = 4.dp),
                     )
                 }
-                items(Subject.entries.toList(), key = { "sum_" + it.name }) { subject ->
-                    val decks = state.deckStatuses.filter { it.deck.subject == subject }
+                // Grouped by tab, not by subject, so the parent sees the same
+                // categories the kid does.
+                items(tabs.filter { it.subjects.isNotEmpty() }, key = { "sum_" + it.title }) { spec ->
+                    val decks = state.deckStatuses.filter { it.deck.subject in spec.subjects }
                     if (decks.isNotEmpty()) {
                         val learn = decks.sumOf { it.masteredCount }
                         val quizzed = decks.sumOf { it.quizMasteredCount }
                         val total = decks.sumOf { it.total }
                         Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
                             Text(
-                                tabs.firstOrNull { it.subject == subject }?.let { "${it.emoji} ${it.title}" } ?: subject.name,
+                                "${spec.emoji} ${spec.title}",
                                 fontSize = 15.sp,
                                 modifier = Modifier.weight(1f),
                             )
